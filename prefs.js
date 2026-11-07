@@ -1,0 +1,11 @@
+pref("extensions.readingcoach.baseURL", "https://api.deepseek.com");
+pref("extensions.readingcoach.apiKey", "");
+pref("extensions.readingcoach.model", "deepseek-chat");
+pref("extensions.readingcoach.vaultPath", "");
+pref("extensions.readingcoach.papersFolder", "Papers");
+pref("extensions.readingcoach.trendsFolder", "Trends");
+pref("extensions.readingcoach.tableFile", "Reading table.md");
+pref("extensions.readingcoach.noteName", "{{citekey}}");
+pref("extensions.readingcoach.field", "");
+pref("extensions.readingcoach.position", "");
+pref("extensions.readingcoach.maxChars", 100000);

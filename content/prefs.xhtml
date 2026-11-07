@@ -1,0 +1,45 @@
+<vbox id="readingcoach-prefs" xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" xmlns:html="http://www.w3.org/1999/xhtml">
+  <html:style>
+    #readingcoach-prefs .rc-field { display: flex; flex-direction: column; gap: 3px; margin-block: 6px; }
+    #readingcoach-prefs .rc-field input, #readingcoach-prefs .rc-field textarea { width: 100%; box-sizing: border-box; }
+    #readingcoach-prefs .rc-row { display: flex; gap: 6px; align-items: center; }
+    #readingcoach-prefs .rc-row input { flex: 1; }
+    #readingcoach-prefs .rc-hint { opacity: .75; font-size: .92em; }
+  </html:style>
+  <groupbox>
+    <label><html:h2>Model</html:h2></label>
+    <html:p class="rc-hint">Any service that offers an OpenAI-compatible chat API: DeepSeek, Qwen, Kimi, OpenRouter, or a local model in Ollama or LM Studio.</html:p>
+    <html:label class="rc-field">Address (base URL)
+      <html:input type="text" data-pref="baseURL" placeholder="https://api.deepseek.com"/></html:label>
+    <html:label class="rc-field">Model name
+      <html:input type="text" data-pref="model" placeholder="deepseek-chat"/></html:label>
+    <html:label class="rc-field">API key
+      <html:input type="password" data-pref="apiKey" placeholder="Paste your key"/></html:label>
+    <html:div class="rc-row"><html:button id="rc-test">Test the connection</html:button><html:span id="rc-test-result" class="rc-hint"></html:span></html:div>
+    <html:p class="rc-hint">The key is stored in Zotero's settings on this computer.</html:p>
+  </groupbox>
+  <groupbox>
+    <label><html:h2>Obsidian</html:h2></label>
+    <html:label class="rc-field">Vault folder
+      <html:div class="rc-row"><html:input type="text" data-pref="vaultPath" placeholder="/Users/you/Documents/MyVault"/><html:button id="rc-choose">Choose…</html:button></html:div></html:label>
+    <html:label class="rc-field">Folder for paper notes, inside the vault
+      <html:input type="text" data-pref="papersFolder" placeholder="Papers"/></html:label>
+    <html:label class="rc-field">Note name
+      <html:input type="text" data-pref="noteName" placeholder="{{citekey}}"/></html:label>
+    <html:p class="rc-hint">Use {{citekey}}, {{author}}, {{year}} and {{title}}, for example @{{citekey}}. Papers without a citekey are named "Author Year - Title".</html:p>
+    <html:label class="rc-field">Folder for trend checks
+      <html:input type="text" data-pref="trendsFolder" placeholder="Trends"/></html:label>
+    <html:label class="rc-field">Reading table file
+      <html:input type="text" data-pref="tableFile" placeholder="Reading table.md"/></html:label>
+    <html:label class="rc-field">Most PDF text to send (characters)
+      <html:input type="text" data-pref="maxChars" placeholder="100000"/></html:label>
+    <html:p class="rc-hint">About 100,000 characters covers most papers in full. Longer papers send their first and last parts.</html:p>
+  </groupbox>
+  <groupbox>
+    <label><html:h2>Your research</html:h2></label>
+    <html:label class="rc-field">Field
+      <html:input type="text" data-pref="field" placeholder="e.g. AI in higher education"/></html:label>
+    <html:label class="rc-field">Current position (one or two lines; every paper is compared with it)
+      <html:textarea rows="3" data-pref="position" placeholder="e.g. AI support helps learning only when students do the thinking first."></html:textarea></html:label>
+  </groupbox>
+</vbox>

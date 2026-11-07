@@ -1,0 +1,92 @@
+/* Reading Coach dialogs. The same reading-desk palette as the web version, with system fonts. */
+:root {
+  --bg: #e9eef0; --surface: #ffffff; --sunk: #f3f6f7; --ink: #17232b; --muted: #566772; --line: #ccd7dc;
+  --accent: #0d6b5d; --accent-ink: #ffffff; --accent-soft: #d6ece7; --mark: #ffe680;
+  --good: #14663a; --good-soft: #d9f0e1; --warn: #8a4b00; --warn-soft: #fdeacc; --bad: #a32c2c; --bad-soft: #fbe0de;
+  --ui: -apple-system, "Segoe UI", system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --read: Georgia, "Songti SC", "SimSun", serif;
+  --mono: ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #10171b; --surface: #182228; --sunk: #141c21; --ink: #e7eef1; --muted: #9db0ba; --line: #2d3b43;
+    --accent: #55c8b3; --accent-ink: #08221d; --accent-soft: #17403a; --mark: #6b5a10;
+    --good: #7fdba3; --good-soft: #173a26; --warn: #f3bd72; --warn-soft: #46300f; --bad: #f4a5a0; --bad-soft: #4a2020;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--ui); overflow-y: auto; }
+button, input, textarea, select { font: inherit; color: inherit; }
+h1, h2, h3, p { margin: 0; }
+#app { max-width: 760px; margin: 0 auto; padding: 16px 18px 40px; display: grid; gap: 14px; }
+.steps { display: flex; gap: 4px; flex-wrap: wrap; position: sticky; top: 0; background: var(--bg); padding-block: 8px; z-index: 2; }
+.steps button { border: 1px solid var(--line); background: var(--surface); border-radius: 14px; padding: 3px 10px; font-size: 12.5px; color: var(--muted); cursor: default; }
+.steps button.done { background: var(--accent-soft); color: var(--ink); cursor: pointer; }
+.steps button.cur { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px 18px; display: grid; gap: 12px; }
+.title { font-family: var(--read); font-weight: 700; font-size: 20px; line-height: 1.3; }
+.meta { color: var(--muted); font-size: 13.5px; }
+.eyebrow { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.small { font-size: 13px; color: var(--muted); }
+.reading { font-family: var(--read); font-size: 16px; line-height: 1.65; }
+label.f { display: grid; gap: 4px; font-weight: 700; font-size: 13.5px; }
+textarea, input[type=text], select { width: 100%; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); padding: 7px 9px; font-weight: 400; font-size: 15px; }
+textarea { min-height: 62px; resize: vertical; line-height: 1.45; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.between { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 13px; cursor: pointer; font-weight: 700; font-size: 14px; }
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.quiet { border-color: transparent; background: none; color: var(--muted); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: var(--surface); padding: 5px 11px; cursor: pointer; font-weight: 700; font-size: 13px; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.q { border: 1px solid var(--line); border-radius: 4px; padding: 11px; display: grid; gap: 8px; background: var(--sunk); }
+.fb { border-radius: 4px; padding: 8px 10px; font-size: 14px; }
+.fb.right { background: var(--good-soft); color: var(--good); }
+.fb.partly, .fb.hint { background: var(--warn-soft); color: var(--warn); }
+.fb.wrong, .fb.error { background: var(--bad-soft); color: var(--bad); }
+.fb.plain { background: var(--surface); border: 1px solid var(--line); }
+.chip { display: inline-block; font-size: 12px; font-weight: 700; padding: 1px 7px; border-radius: 3px; text-transform: capitalize; }
+.chip.right { background: var(--good-soft); color: var(--good); }
+.chip.partly { background: var(--warn-soft); color: var(--warn); }
+.chip.wrong { background: var(--bad-soft); color: var(--bad); }
+.chat { display: grid; gap: 8px; max-height: 46vh; overflow-y: auto; padding-right: 4px; }
+.msg { border-radius: 6px; padding: 8px 11px; white-space: pre-wrap; max-width: 88%; }
+.msg.ai { background: var(--sunk); border: 1px solid var(--line); justify-self: start; }
+.msg.me { background: var(--accent-soft); justify-self: end; }
+.msg b { display: block; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.busy { color: var(--muted); font-style: italic; }
+.out { white-space: pre-wrap; background: var(--sunk); border-radius: 4px; padding: 10px 12px; }
+.note { background: var(--warn-soft); color: var(--warn); border-radius: 4px; padding: 8px 10px; font-size: 14px; }
+
+/* Abstract sentences and clips */
+.sent { cursor: pointer; border-radius: 2px; transition: background-color .15s; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.sent:hover { background: var(--sunk); box-shadow: inset 0 -2px 0 var(--accent); }
+.sent.kept { background: var(--mark); }
+.clips { border: 1px solid var(--line); border-radius: 6px; background: var(--sunk); padding: 8px 10px; }
+.clips summary { cursor: pointer; font-weight: 700; font-size: 14px; }
+.clips[open] summary { margin-bottom: 8px; }
+.drop { border: 2px dashed var(--line); border-radius: 4px; padding: 8px; display: grid; gap: 8px; min-height: 48px; background: var(--surface); }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.clip { display: grid; gap: 4px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.clip:last-child { border-bottom: 0; padding-bottom: 0; }
+.quote { font-family: var(--read); font-size: 14.5px; line-height: 1.5; border-left: 3px solid var(--mark); padding-left: 8px; }
+.btn.small { padding: 3px 8px; font-size: 12.5px; }
+.paste { margin-top: 8px; flex-wrap: nowrap; }
+.paste input { flex: 1; min-width: 0; }
+
+/* Narrow layout inside the reader's side panel */
+body.pane { overflow: hidden; }
+body.pane #app { max-width: none; padding: 4px 2px 12px; gap: 10px; }
+body.pane .steps { position: static; padding-block: 0; }
+body.pane .steps button { padding: 2px 7px; font-size: 11.5px; }
+body.pane .card { padding: 12px; gap: 10px; }
+body.pane .title { font-size: 16px; }
+body.pane .reading { font-size: 14.5px; }
+body.pane .chat { max-height: 50vh; }

@@ -1,0 +1,18 @@
+{
+  "addons": {
+    "reading-coach@local.plugin": {
+      "updates": [
+        {
+          "version": "0.2.1",
+          "update_link": "https://github.com/narcoco/reading-coach/releases/download/v0.2.1/reading-coach.xpi",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "6.999",
+              "strict_max_version": "11.*"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

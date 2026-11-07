@@ -1,4 +1,4 @@
 readingcoach-section-head =
-    .label = Reading Coach
+    .label = Coach Angela
 readingcoach-section-sidenav =
-    .tooltiptext = Reading Coach
+    .tooltiptext = Coach Angela

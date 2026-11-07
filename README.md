@@ -11,7 +11,7 @@ Reads a paper with you in six steps, using your own AI model, and saves the resu
 
 The Obsidian note opens with the at-a-glance section. Clips you assign to a section (Theory, Methods and so on) appear under that heading; unsorted clips go under "What the paper actually says".
 
-When you choose **Study it with the PDF**, the paper opens in Zotero's reader and the remaining steps continue in the **Reading Coach** section of the reader's right-hand panel.
+When you choose **Study it with the PDF**, the paper opens in Zotero's reader and the remaining steps continue in the **Coach Angela** section of the reader's right-hand panel.
 
 **My clips:** after the abstract, keep what the paper actually says. Click an abstract sentence, drag text or highlights in from the PDF, or paste a passage. Each clip can carry a short note, and all of them go into the Obsidian note.
 
@@ -51,7 +51,7 @@ Download the newest `.xpi` from the [`dist` folder](https://github.com/narcoco/r
 - **Paper text**: when a paper has a PDF, the AI reads its text (up to 100,000 characters, which covers most papers in full; change this in settings). If Zotero hasn't extracted the text yet, Reading Coach asks it to. If there's no PDF, or the PDF is a scanned image with no text, the AI reads the abstract only. The screen always says which.
 - **Privacy**: the paper's text and your answers are sent to the model service you chose. Your API key is stored in Zotero's settings on this computer.
 - **Cost**: one paper costs a few model calls, plus one for each discussion turn. Each call resends the paper text, up to 100,000 characters.
-- **Version**: this is a first version (0.3.1). It is marked compatible with Zotero 7 to 11. Zotero now releases a new major version every 6 to 10 weeks, and each one may need the plugin's version limit raised.
+- **Version**: this is a first version (0.3.2). It is marked compatible with Zotero 7 to 11. Zotero now releases a new major version every 6 to 10 weeks, and each one may need the plugin's version limit raised.
 
 ## Releasing an update
 

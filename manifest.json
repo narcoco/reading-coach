@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Reading Coach",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Read a paper in steps (guess, questions, figure and limit, discussion, takeaway) with your own AI model, then save the note and a reading table to Obsidian.",
   "applications": {
     "zotero": {

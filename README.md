@@ -17,7 +17,7 @@ Saving writes a note to your vault (with properties, clips and flashcards), adds
 
 ## Install
 
-Download `reading-coach.xpi` from the latest release on the [Releases page](https://github.com/narcoco/reading-coach/releases). Once installed, Zotero updates it automatically.
+Download the newest `.xpi` from the [`dist` folder](https://github.com/narcoco/reading-coach/tree/main/dist) (open the file, then **Download raw file**). Once installed, Zotero updates it automatically.
 
 1. In Zotero, open **Tools → Plugins**.
 2. Click the gear icon, choose **Install Plugin From File…**, and pick `reading-coach.xpi`.
@@ -53,12 +53,10 @@ Download `reading-coach.xpi` from the latest release on the [Releases page](http
 
 ## Releasing an update
 
-1. Raise `version` in `manifest.json` (for example 0.1.4 to 0.1.5). For a new Zotero version, also raise `strict_max_version`.
-2. Build the `.xpi`: zip `manifest.json`, `bootstrap.js`, `prefs.js` and the `content` folder, with these at the top level of the zip, and name it `reading-coach.xpi`.
-3. On GitHub, create a release tagged `v0.1.5` and attach `reading-coach.xpi`.
-4. In `updates.json`, set `version` to the new number and change both `0.1.4`s in `update_link` to it. Commit the change.
-
-Zotero checks `updates.json` about once a day, or straight away from Tools → Plugins → gear → Check for Updates.
+1. Raise `version` in `manifest.json` (for example 0.2.1 to 0.2.2). For a new Zotero version, also raise `strict_max_version` here and in `updates.json`.
+2. Build the `.xpi`: zip `manifest.json`, `bootstrap.js`, `prefs.js`, `content` and `locale`, with these at the top level of the zip. Save it as `dist/reading-coach-0.2.2.xpi`.
+3. In `updates.json`, set `version` to the new number and point `update_link` at the new file.
+4. Commit and push. Zotero checks `updates.json` about once a day, or straight away from Tools → Plugins → gear → Check for Updates.
 
 ## Ideas for later
 

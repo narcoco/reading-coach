@@ -4,7 +4,7 @@
       "updates": [
         {
           "version": "0.2.1",
-          "update_link": "https://github.com/narcoco/reading-coach/releases/download/v0.2.1/reading-coach.xpi",
+          "update_link": "https://raw.githubusercontent.com/narcoco/reading-coach/main/dist/reading-coach-0.2.1.xpi",
           "applications": {
             "zotero": {
               "strict_min_version": "6.999",

@@ -35,7 +35,7 @@
   const fbox = (text, cls) => h("p", { class: "fb " + cls, role: "status" }, text);
 
   function blank() {
-    return { step: "guess", guess: "", guessMark: "", questions: [], checked: false, figure: "", limit: "", turns: [], takeaway: "", stance: "", evidence: "", linkTo: "", linkNote: "", savedPath: "", clips: [], predict: [] };
+    return { step: "guess", guess: "", guessMark: "", questions: [], checked: false, figure: "", limit: "", turns: [], takeaway: "", stance: "", evidence: "", linkTo: "", linkNote: "", savedPath: "", clips: [], predict: [], focus: null, rq: "", glance: null };
   }
   function persist() {
     clearTimeout(saveTimer);
@@ -50,7 +50,7 @@
     render();
     window.scrollTo(0, 0);
     if (pane && io.scrollIntoView) io.scrollIntoView();
-    if (step === "questions" && !rec.questions.length && !busy.questions) makeQuestions();
+    if (step === "close" && !rec.glanceFilled) { rec.glance = RC.prefillGlance(rec); rec.glanceFilled = true; persist(); render(); }
   }
 
   /* ---------- Model calls ---------- */
@@ -58,9 +58,11 @@
     const my = ++runID;
     busy.questions = true; err.questions = ""; startClock(); render();
     try {
-      const reply = await io.llm(RC.questionsMessages(paper, settings));
+      const reply = await io.llm(RC.questionsMessages(paper, settings, rec.focus));
       if (my !== runID) return;
-      rec.questions = RC.cleanQuestions(RC.parseJSON(reply));
+      const parsed = RC.parseJSON(reply);
+      rec.questions = RC.cleanQuestions(parsed);
+      rec.rq = RC.oneLine(parsed && parsed.research_question) || rec.rq;
       rec.checked = false;
       persist();
     } catch (e) { if (my !== runID) return; err.questions = e.message; }
@@ -79,7 +81,7 @@
     busy.check = true; err.check = ""; startClock(); render();
     try {
       const res = RC.cleanResults(RC.parseJSON(await io.llm(RC.checkMessages(paper, settings, rec.questions))), rec.questions.length);
-      res.forEach((r, i) => Object.assign(rec.questions[i], r));
+      res.forEach((r, i) => Object.assign(rec.questions[i], { verdict: r.verdict, feedback: r.feedback, readPage: r.page || 0, readQuote: r.quote || "" }));
       rec.checked = true;
       persist();
     } catch (e) { err.check = e.message; }
@@ -257,7 +259,10 @@
         rec.clips.map((c, i) => h("div", { class: "clip" },
           h("p", { class: "quote" }, c.text),
           h("div", { class: "between" }, h("span", { class: "small" }, RC.clipSource(c)), btn("Remove", () => { rec.clips.splice(i, 1); persist(); render(); }, "quiet small")),
-          h("input", { type: "text", "aria-label": "Your note on this clip", placeholder: "Why it matters (optional)", value: c.note, on: { input: e => { c.note = e.target.value; persist(); } } })))),
+          h("div", { class: "row clipmeta" },
+            h("select", { "aria-label": "Section in your note", on: { change: e => { c.section = e.target.value; persist(); } } },
+              [h("option", { value: "" }, "Section: none")].concat(RC.GLANCE.map(([k, label]) => h("option", { value: k, selected: c.section === k ? "selected" : null }, label)))),
+            h("input", { type: "text", "aria-label": "Your note on this clip", placeholder: "Why it matters (optional)", value: c.note, on: { input: e => { c.note = e.target.value; persist(); } } }))))),
       h("div", { class: "row paste" },
         h("input", { type: "text", id: "paste", placeholder: "Paste a passage from the PDF", "aria-label": "Paste a passage", on: { keydown: e => { if (e.key === "Enter") { e.preventDefault(); pasteClip(); } } } }),
         btn("Add", pasteClip, "small")));
@@ -277,25 +282,60 @@
       h("p", { class: "small" }, "Your answer boxes appear when the questions arrive. Long papers can take up to a minute."),
       h("div", { class: "row" }, btn("Stop waiting", () => { runID++; busy.questions = false; err.questions = "Stopped. Try again, or switch to a faster model in Zotero Settings → Reading Coach."; render(); }, "quiet")));
     else if (err.questions) parts.push(fbox(err.questions, "error"), h("div", { class: "row" }, btn("Try again", makeQuestions, "primary"), btn("Open settings", () => io.openPrefs())));
-    else if (!rec.questions.length) parts.push(btn("Write my questions", makeQuestions, "primary"));
+    else if (!rec.questions.length) parts.push(focusPicker());
     else {
       parts.push(h("p", { class: "small" }, rec.checked ? "Read the feedback, then go back to the parts of the paper it points to." : "Answer from what you know or a quick look at the paper. Don't open a summary yet."));
       rec.questions.forEach((q, i) => {
         parts.push(h("div", { class: "q" },
-          h("b", {}, (i + 1) + ". " + q.q),
+          h("b", {}, q.focus ? h("span", { class: "chip focus" }, RC.FOCUS[q.focus][0]) : null, " ", (i + 1) + ". " + q.q),
           h("textarea", { id: "ans-" + i, "aria-label": "Your answer to question " + (i + 1), readonly: rec.checked ? "readonly" : null, value: q.mine, placeholder: "Your answer", on: { input: e => { q.mine = e.target.value; persist(); liveEnable("check", () => rec.questions.every(x => x.mine.trim())); } } }),
           rec.checked ? [
             h("p", { class: "fb " + q.verdict }, h("span", { class: "chip " + q.verdict }, q.verdict), " ", q.feedback),
-            h("p", { class: "fb plain" }, h("b", {}, "In the paper: "), q.answer, q.where ? " (" + q.where + ")" : "")
+            h("div", { class: "fb plain" }, h("p", {}, h("b", {}, "In the paper: "), q.answer), whereRow(q))
           ] : null));
       });
       if (err.check) parts.push(fbox(err.check, "error"));
       if (!rec.checked) parts.push(h("div", { class: "row" },
         h("button", { id: "check", class: "btn primary", disabled: busy.check || !rec.questions.every(x => x.mine.trim()), on: { click: checkAnswers } }, busy.check ? ["Checking… ", elapsed()] : "Check my answers"),
-        btn("Ask different questions", () => { rec.questions = []; makeQuestions(); }, "quiet", busy.check)));
+        btn("Choose a different focus", () => { rec.questions = []; persist(); render(); }, "quiet", busy.check)));
     }
     parts.push(nav("abstract", "Next", () => go("evidence"), rec.checked), clipsBox());
     return h("section", { class: "card" }, parts);
+  }
+  function focusPicker() {
+    if (!Array.isArray(rec.focus)) rec.focus = (settings.focus && settings.focus.length ? settings.focus : RC.FOCUS_ORDER).filter(k => RC.FOCUS[k]);
+    const toggle = k => {
+      rec.focus = rec.focus.includes(k) ? rec.focus.filter(x => x !== k) : RC.FOCUS_ORDER.filter(x => x === k || rec.focus.includes(x));
+      persist();
+      try { io.saveFocus(rec.focus); } catch (e) { /* remembering is a convenience */ }
+      render();
+    };
+    return h("div", { class: "q" },
+      h("p", { class: "eyebrow" }, "What should the questions focus on?"),
+      h("div", { class: "row" }, RC.FOCUS_ORDER.map(k => h("button", { class: "pick", "aria-pressed": rec.focus.includes(k) ? "true" : "false", on: { click: () => toggle(k) } }, RC.FOCUS[k][0]))),
+      h("p", { class: "small" }, "One question for each. Your choice is remembered for the next paper."),
+      h("div", { class: "row" }, btn("Write my questions", makeQuestions, "primary", !rec.focus.length)));
+  }
+  /* Where to look: section, PDF page, an exact quote, and buttons to jump or copy. */
+  function whereRow(q) {
+    const quote = q.readQuote || q.quote;
+    q.loc = RC.locate(paper, quote, q.readPage || q.page) || 0;
+    const bits = [q.where, q.loc ? "PDF page " + q.loc : ""].filter(Boolean).join(" · ");
+    return [
+      quote ? h("p", { class: "quote" }, "\u201c" + quote + "\u201d") : null,
+      h("div", { class: "row" },
+        bits ? h("span", { class: "small" }, bits) : null,
+        q.loc && paper.pdfID ? btn("Go to page " + q.loc, () => { io.goToPage(paper.pdfID, q.loc).catch(e => { err.reader = "Couldn't open the page: " + e.message; render(); }); }, "small") : null,
+        quote ? btn("Copy the quote", e => { io.copy(quote); e.target.textContent = "Copied. Use Cmd+F in the PDF"; }, "quiet small") : null)
+    ];
+  }
+  function glanceEditor() {
+    if (!rec.glance) rec.glance = RC.prefillGlance(rec);
+    return h("div", { class: "q" },
+      h("p", { class: "eyebrow" }, "Paper at a glance"),
+      h("p", { class: "small" }, "This opens your Obsidian note. It's filled in from your answers and the paper; rewrite it in your own words."),
+      RC.GLANCE.map(([k, label]) => h("label", { class: "f" }, label,
+        h("textarea", { id: "g-" + k, rows: "2", value: rec.glance[k] || "", on: { input: e => { rec.glance[k] = e.target.value; persist(); } } }))));
   }
   function viewEvidence() {
     const ok = () => rec.figure.trim() && rec.limit.trim();
@@ -330,7 +370,7 @@
     const opts = (map, cur) => [h("option", { value: "" }, "Choose one")].concat(Object.entries(map).map(([k, v]) => h("option", { value: k, selected: cur === k ? "selected" : null }, v)));
     const sel = (label, key, map) => h("label", { class: "f" }, label, h("select", { id: "f-" + key, on: { change: e => { rec[key] = e.target.value; persist(); liveEnable("save", ok); liveEnable("save-new", ok); } } }, opts(map, rec[key])));
     const notes = (notesCache || []).filter(n => n.fm && n.fm.reading_coach && n.name !== RC.fileName(paper));
-    const parts = [header(),
+    const parts = [header(), glanceEditor(),
       textField("In your own words, what does this paper mean for your work?", "takeaway", "One or two sentences.", () => { liveEnable("save", ok); liveEnable("save-new", ok); }),
       sel("Compared with your position" + (settings.position ? " (" + RC.oneLine(settings.position).slice(0, 80) + ")" : "") + ", this paper…", "stance", RC.STANCE),
       sel("Kind of evidence", "evidence", RC.EVIDENCE)];
@@ -395,7 +435,6 @@
       if (!Array.isArray(rec.clips)) rec.clips = [];
       if (!Array.isArray(rec.predict)) rec.predict = [];
       render();
-      if (rec.step === "questions" && !rec.questions.length) makeQuestions();
     } catch (e) {
       app.replaceChildren(fbox("Couldn't open this paper: " + e.message, "error"));
     }

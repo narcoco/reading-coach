@@ -90,3 +90,11 @@ body.pane .card { padding: 12px; gap: 10px; }
 body.pane .title { font-size: 16px; }
 body.pane .reading { font-size: 14.5px; }
 body.pane .chat { max-height: 50vh; }
+
+.chip.focus { background: var(--accent-soft); color: var(--ink); text-transform: none; margin-right: 2px; }
+.pick { border: 1px solid var(--line); background: var(--surface); border-radius: 14px; padding: 4px 12px; font-weight: 700; font-size: 13px; cursor: pointer; color: var(--muted); }
+.pick[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.clipmeta { flex-wrap: nowrap; }
+.clipmeta select { width: auto; flex: 0 0 auto; font-size: 13px; padding: 4px 6px; }
+.clipmeta input { flex: 1; min-width: 0; }
+.fb.plain .quote { margin: 6px 0; }

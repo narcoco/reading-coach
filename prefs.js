@@ -9,3 +9,4 @@ pref("extensions.readingcoach.noteName", "{{citekey}}");
 pref("extensions.readingcoach.field", "");
 pref("extensions.readingcoach.position", "");
 pref("extensions.readingcoach.maxChars", 100000);
+pref("extensions.readingcoach.focus", "findings,methods,theory,limits");

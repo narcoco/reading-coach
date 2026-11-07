@@ -20,6 +20,27 @@ var RC = (function () {
     theory: "Theory or position",
     other: "Other"
   };
+  const FOCUS = {
+    findings: ["Findings", "the main finding or claim"],
+    methods: ["Methods", "the method: the design, the participants or data, and the analysis, and why they suit the research question"],
+    theory: ["Theory", "the theory or conceptual framework the paper uses or builds, and how it shapes the study"],
+    limits: ["Limitations", "a limitation, a boundary condition, or what the findings do not show"]
+  };
+  const FOCUS_ORDER = ["findings", "methods", "theory", "limits"];
+  const GLANCE = [["rq", "Research question"], ["theory", "Theory"], ["methods", "Methods"], ["findings", "Findings"], ["limits", "Limitations"]];
+  function prefillGlance(rec) {
+    const g = Object.assign({ rq: "", theory: "", methods: "", findings: "", limits: "" }, rec.glance || {});
+    const best = k => {
+      const q = (rec.questions || []).find(x => x.focus === k);
+      if (!q) return "";
+      return q.verdict === "right" && String(q.mine || "").trim() ? String(q.mine).trim() : q.answer;
+    };
+    if (!g.rq) g.rq = rec.rq || "";
+    ["theory", "methods", "findings", "limits"].forEach(k => { if (!g[k]) g[k] = best(k); });
+    if (rec.figure && !g.findings.includes(rec.figure)) g.findings = (g.findings ? g.findings + " " : "") + "Key figure: " + oneLine(rec.figure);
+    if (rec.limit && !g.limits.includes(rec.limit)) g.limits = (g.limits ? g.limits + " " : "") + oneLine(rec.limit);
+    return g;
+  }
   const STEPS = [
     ["guess", "Guess"],
     ["abstract", "Abstract"],
@@ -40,6 +61,25 @@ var RC = (function () {
     return String(t || "").replace(/\s+/g, " ").trim()
       .split(/(?<![Ee]t al\.|e\.g\.|i\.e\.|Fig\.|vs\.|cf\.|pp\.|\b[A-Z]\.)(?<=[.!?]["')\]]?)\s+(?=["'(\[]?[A-Z0-9])/)
       .map(x => x.trim()).filter(Boolean);
+  }
+  /* Find which PDF page holds a quote. Returns a 1-based page number, or the model's guess. */
+  function squash(t) { return String(t || "").toLowerCase().replace(/-\s*\n\s*/g, "").replace(/[^a-z0-9\u00c0-\uffff]+/g, " ").trim(); }
+  function locate(paper, quote, hint) {
+    const pages = paper.pages;
+    if (!pages || !pages.length) return 0;
+    const q = squash(quote);
+    if (q.length >= 12) {
+      const flat = pages.map(squash);
+      const words = q.split(" ");
+      const probes = [q, words.slice(0, 8).join(" "), words.slice(-8).join(" "), words.slice(0, 5).join(" ")];
+      for (const p of probes) {
+        if (p.length < 12) continue;
+        const i = flat.findIndex(t => t.includes(p));
+        if (i >= 0) return i + 1;
+      }
+    }
+    const h = Number(hint) || 0;
+    return h >= 1 && h <= pages.length ? h : 0;
   }
   function clipSource(c) {
     if (c.from === "abstract") return "abstract";
@@ -75,8 +115,10 @@ var RC = (function () {
   }
   function cleanQuestions(raw) {
     const list = Array.isArray(raw) ? raw : raw && Array.isArray(raw.questions) ? raw.questions : [];
-    const out = list.filter(x => x && x.q).slice(0, 3).map(x => ({
-      q: oneLine(x.q), answer: oneLine(x.answer), where: oneLine(x.where), mine: "", verdict: "", feedback: ""
+    const out = list.filter(x => x && x.q).slice(0, 4).map(x => ({
+      q: oneLine(x.q), answer: oneLine(x.answer), where: oneLine(x.where),
+      focus: FOCUS[x.focus] ? x.focus : "", page: Number(x.page) || 0, quote: oneLine(x.quote),
+      mine: "", verdict: "", feedback: ""
     }));
     if (!out.length) throw new Error("The model did not return any questions.");
     return out;
@@ -88,7 +130,7 @@ var RC = (function () {
       const r = list[i] || {};
       let v = String(r.verdict || "").toLowerCase();
       if (!["right", "partly", "wrong"].includes(v)) v = v.startsWith("r") ? "right" : v.startsWith("p") ? "partly" : "wrong";
-      out.push({ verdict: v, feedback: oneLine(r.feedback) });
+      out.push({ verdict: v, feedback: oneLine(r.feedback), page: Number(r.page) || 0, quote: oneLine(r.quote) });
     }
     return out;
   }
@@ -101,7 +143,7 @@ var RC = (function () {
       "",
       "Paper: " + paper.title,
       "Authors: " + (paper.authors || []).join(", ") + (paper.year ? " (" + paper.year + ")" : ""),
-      paper.fulltext ? "Full text of the paper:" : "Only the abstract is available:",
+      paper.fulltext ? "Full text of the paper" + (paper.pages ? ", with a [page N] marker at the start of each PDF page:" : ":") : "Only the abstract is available:",
       "<<<",
       clip(paper.fulltext || paper.abstract || "(no text available)", settings.maxChars || 100000),
       ">>>"
@@ -112,23 +154,32 @@ var RC = (function () {
   /* What the model will read, in plain words, for the screen. */
   function sourceInfo(paper, settings) {
     const n = (paper.fulltext || "").trim().length, max = settings.maxChars || 100000;
-    const k = x => Math.round(x / 1000) + ",000";
+    const k = x => x < 1000 ? String(x) : Math.round(x / 1000).toLocaleString("en-US") + ",000";
     if (n > 0 && n <= max) return { kind: "full", text: "The AI reads the full text of the PDF (about " + k(n) + " characters)." };
     if (n > max) return { kind: "part", text: "The AI reads most of the PDF: the first and last parts, " + k(max) + " of about " + k(n) + " characters. You can raise the limit in Zotero Settings → Reading Coach." };
     if (paper.hasPDF) return { kind: "abstract", text: "Zotero couldn't get any text from this PDF (it may be a scanned image), so the AI reads the abstract only." };
     return { kind: "abstract", text: "This paper has no PDF attached, so the AI reads the abstract only." };
   }
-  function questionsMessages(paper, settings) {
+  function locateRules(paper) {
+    return [
+      '"where" is the section name (and figure or table, if any) where the answer is.',
+      paper.pages ? '"page" is the number in the [page N] marker that comes before the passage.' : '"page" is 0.',
+      '"quote" is 6 to 20 consecutive words copied exactly from the paper, from the passage that holds the answer. Do not paraphrase it.'
+    ];
+  }
+  function questionsMessages(paper, settings, focus) {
+    const keys = FOCUS_ORDER.filter(k => (focus || FOCUS_ORDER).includes(k));
     return [
       { role: "system", content: SYSTEM },
       { role: "user", content: context(paper, settings) + "\n\n" + [
-        "Write exactly 3 questions whose answers are stated in this paper:",
-        "1. the main finding or claim;",
-        "2. the evidence or method behind it;",
-        "3. a limitation, boundary condition or what the finding does not show.",
+        "Write exactly " + keys.length + " question" + (keys.length > 1 ? "s" : "") + " whose answers are stated in this paper, one for each focus, in this order:",
+        keys.map((k, i) => (i + 1) + ". focus \"" + k + "\": " + FOCUS[k][1] + ";").join("\n"),
+        "If the paper has nothing on a focus (for example no explicit theory), ask what the paper implicitly assumes about it, and say so in the answer.",
         "Where the researcher's position is given, prefer questions that bear on it. Avoid trivia such as sample size alone.",
-        "For each, give a reference answer of one or two sentences and where in the paper to look (section, page, figure or table).",
-        'Reply with only JSON: {"questions":[{"q":"...","answer":"...","where":"..."}]}'
+        "For each, give a reference answer of one or two sentences.",
+        'Also give "research_question": the paper\'s research question or aim, in one sentence.',
+        ...locateRules(paper),
+        'Reply with only JSON: {"research_question":"...","questions":[{"focus":"methods","q":"...","answer":"...","where":"...","page":4,"quote":"..."}]}'
       ].join("\n") }
     ];
   }
@@ -165,7 +216,9 @@ var RC = (function () {
         "Judge each answer against the paper itself, not the exact wording of the reference answer.",
         'verdict is "right", "partly" or "wrong".',
         'feedback is one or two sentences addressed to the researcher as "you": say what was right, what was missing or mistaken, and where in the paper to look.',
-        'Reply with only JSON: {"results":[{"verdict":"...","feedback":"..."}]} in the same order.'
+        "Also point to the single passage they should read again:",
+        ...locateRules(paper).slice(1),
+        'Reply with only JSON: {"results":[{"verdict":"...","feedback":"...","page":4,"quote":"..."}]} in the same order.'
       ].join("\n") }
     ];
   }
@@ -246,6 +299,9 @@ var RC = (function () {
       "evidence: " + (rec.evidence || '""'),
       "takeaway: " + yamlStr(rec.takeaway),
       "limit: " + yamlStr(rec.limit),
+      "research_question: " + yamlStr((rec.glance || {}).rq),
+      "theory: " + yamlStr(oneLine((rec.glance || {}).theory).slice(0, 300)),
+      "methods: " + yamlStr(oneLine((rec.glance || {}).methods).slice(0, 300)),
       "guess_match: " + (rec.guessMark || '""'),
       "score: " + yamlStr(rec.questions.filter(q => q.verdict === "right").length + "/" + rec.questions.length),
       "tags: [paper]",
@@ -254,6 +310,25 @@ var RC = (function () {
     const body = [];
     body.push("# " + oneLine(paper.title), "");
     body.push("[Open in Zotero](" + paper.zoteroURI + ")" + (paper.doi ? " · [DOI](https://doi.org/" + paper.doi + ")" : ""), "");
+    const clips = rec.clips || [];
+    const quoteLines = c => {
+      const out = ["> " + oneLine(c.text), "> — " + clipSource(c)];
+      if (c.note) out.push("", "My note: " + oneLine(c.note));
+      out.push("");
+      return out;
+    };
+    const g = rec.glance || {};
+    if (GLANCE.some(([k]) => (g[k] || "").trim()) || clips.some(c => c.section)) {
+      body.push("## At a glance", "");
+      GLANCE.forEach(([k, label]) => {
+        const mine = clips.filter(c => c.section === k);
+        if (!(g[k] || "").trim() && !mine.length) return;
+        body.push("### " + label);
+        if ((g[k] || "").trim()) body.push(String(g[k]).trim());
+        body.push("");
+        mine.forEach(c => body.push(...quoteLines(c)));
+      });
+    }
     body.push("## My takeaway", rec.takeaway.trim(), "");
     body.push("- Stance: " + (STANCE[rec.stance] || "not set"));
     body.push("- Evidence: " + (EVIDENCE[rec.evidence] || "not set"));
@@ -262,20 +337,18 @@ var RC = (function () {
     body.push("## Before reading", "My guess: " + (oneLine(rec.guess) || "none") + (rec.guessMark ? " (close? " + rec.guessMark + ")" : ""));
     (rec.predict || []).filter(p => p.a && p.a.trim()).forEach(p => body.push("- " + oneLine(p.q) + " → " + oneLine(p.a)));
     body.push("");
-    if (rec.clips && rec.clips.length) {
+    const loose = clips.filter(c => !c.section);
+    if (loose.length) {
       body.push("## What the paper actually says");
-      rec.clips.forEach(c => {
-        body.push("> " + oneLine(c.text), "> — " + clipSource(c));
-        if (c.note) body.push("", "My note: " + oneLine(c.note));
-        body.push("");
-      });
+      loose.forEach(c => body.push(...quoteLines(c)));
     }
     body.push("## Questions");
     rec.questions.forEach((q, i) => {
       body.push((i + 1) + ". **" + q.q + "**");
       body.push("   - My answer: " + (oneLine(q.mine) || "—") + (q.verdict ? " (" + q.verdict + ")" : ""));
       if (q.feedback) body.push("   - Feedback: " + q.feedback);
-      body.push("   - In the paper: " + q.answer + (q.where ? " (" + q.where + ")" : ""));
+      body.push("   - In the paper: " + q.answer + (q.where ? " (" + q.where + (q.loc ? ", PDF p. " + q.loc : "") + ")" : q.loc ? " (PDF p. " + q.loc + ")" : ""));
+      if (q.readQuote || q.quote) body.push("   - Read: \"" + oneLine(q.readQuote || q.quote) + "\"");
     });
     body.push("");
     body.push("## Key figure", oneLine(rec.figure) || "—", "", "## Limitation", oneLine(rec.limit) || "—", "");
@@ -354,6 +427,6 @@ var RC = (function () {
     ].join("\n");
   }
 
-  return { sourceInfo, predictMessages, cleanPrompts, split, clipSource, STANCE, EVIDENCE, STEPS, parseJSON, cleanQuestions, cleanResults, questionsMessages, checkMessages, discussMessages, trendMessages, fileName, buildNote, zoteroNoteHTML, parseFrontmatter, buildTable, trendNote, today, oneLine };
+  return { GLANCE, prefillGlance, FOCUS, FOCUS_ORDER, locate, sourceInfo, predictMessages, cleanPrompts, split, clipSource, STANCE, EVIDENCE, STEPS, parseJSON, cleanQuestions, cleanResults, questionsMessages, checkMessages, discussMessages, trendMessages, fileName, buildNote, zoteroNoteHTML, parseFrontmatter, buildTable, trendNote, today, oneLine };
 })();
 if (typeof module === "object" && module.exports) module.exports = RC;

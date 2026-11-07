@@ -3,8 +3,8 @@
     "reading-coach@local.plugin": {
       "updates": [
         {
-          "version": "0.2.1",
-          "update_link": "https://raw.githubusercontent.com/narcoco/reading-coach/main/dist/reading-coach-0.2.1.xpi",
+          "version": "0.3.0",
+          "update_link": "https://raw.githubusercontent.com/narcoco/reading-coach/main/dist/reading-coach-0.3.0.xpi",
           "applications": {
             "zotero": {
               "strict_min_version": "6.999",

@@ -53,6 +53,54 @@ var ReadingCoach = {
       });
     } catch (e) { /* best effort */ }
   },
+  /* Text of each PDF page, so answers can point to a page. Cached per PDF version. */
+  async getPages(pdf) {
+    try {
+      const cacheFile = PathUtils.join(Zotero.DataDirectory.dir, "reading-coach", "pages", pdf.key + ".json");
+      const stamp = String(pdf.attachmentSyncedHash || pdf.dateModified || "");
+      if (await IOUtils.exists(cacheFile)) {
+        const c = JSON.parse(await IOUtils.readUTF8(cacheFile));
+        if (c.stamp === stamp && Array.isArray(c.pages)) return c.pages.length > 1 ? c.pages : null;
+      }
+      if (!Zotero.PDFWorker || !Zotero.PDFWorker.getFullText) return null;
+      const all = await Zotero.PDFWorker.getFullText(pdf.id, null, true);
+      const text = (all && all.text) || "";
+      let pages = null;
+      if (text.includes("\f")) {
+        pages = text.split("\f");
+        while (pages.length && !pages[pages.length - 1].trim()) pages.pop();
+      } else {
+        // No page breaks in the text: read one more page at a time and take the new part.
+        const total = (all && all.totalPages) || 0;
+        if (total > 1 && total <= 80) {
+          pages = [];
+          let prev = "";
+          for (let n = 1; n <= total; n++) {
+            const r = await Zotero.PDFWorker.getFullText(pdf.id, n, true);
+            const t = (r && r.text) || "";
+            if (!t.startsWith(prev)) { pages = null; break; }
+            pages.push(t.slice(prev.length));
+            prev = t;
+          }
+        }
+      }
+      if (!pages || pages.length < 2) pages = null;
+      await IOUtils.makeDirectory(PathUtils.parent(cacheFile), { ignoreExisting: true, createAncestors: true });
+      await IOUtils.writeUTF8(cacheFile, JSON.stringify({ stamp, pages: pages || [] }));
+      return pages;
+    } catch (e) { Zotero.logError(e); return null; }
+  },
+  async goToPage(pdfID, page) {
+    const pageIndex = Math.max(0, (Number(page) || 1) - 1);
+    const readers = (Zotero.Reader && Zotero.Reader._readers) || [];
+    const open = readers.find(r => r.itemID === pdfID);
+    if (open) {
+      try { Zotero.getMainWindow().Zotero_Tabs.select(open.tabID); } catch (e) { /* already showing */ }
+      await open.navigate({ pageIndex });
+      return;
+    }
+    await Zotero.Reader.open(pdfID, { pageIndex });
+  },
   async openReader(itemID) {
     let item = Zotero.Items.get(itemID);
     if ((item.isAttachment() || item.isNote()) && item.parentItem) item = item.parentItem;
@@ -93,7 +141,8 @@ var ReadingCoach = {
       noteName: String(p("noteName") || "{{citekey}}").trim(),
       field: String(p("field") || ""),
       position: String(p("position") || ""),
-      maxChars: Number(p("maxChars")) || 100000
+      maxChars: Number(p("maxChars")) || 100000,
+      focus: String(p("focus") || "findings,methods,theory,limits").split(",").map(x => x.trim()).filter(Boolean)
     };
   },
   openPrefs() { Zotero.Utilities.Internal.openPreferences(this.paneID || undefined); },
@@ -160,6 +209,9 @@ var ReadingCoach = {
       openPrefs: () => self.openPrefs(),
       getPaper: () => self.getPaper(itemID),
       openReader: () => self.openReader(itemID),
+      goToPage: (pdfID, page) => self.goToPage(pdfID, page),
+      copy: text => { Zotero.Utilities.Internal.copyTextToClipboard(String(text || "")); },
+      saveFocus: list => self.setPref("focus", list.join(",")),
       llm: messages => self.llm(messages),
       listNotes: () => self.listNotes(),
       noteExists: paper => self.noteExists(paper),
@@ -199,17 +251,22 @@ var ReadingCoach = {
     } catch (e) { /* Better BibTeX not installed */ }
     if (!citekey) citekey = this.field(item, "citationKey");
     if (!citekey) citekey = ((extra.match(/^Citation Key:\s*(\S+)/im) || [])[1] || "");
-    let fulltext = "", hasPDF = false;
+    let fulltext = "", hasPDF = false, pages = null, pdfID = 0;
     try {
       const atts = item.isAttachment() ? [item] : item.getAttachments().map(id => Zotero.Items.get(id));
       const pdf = atts.find(a => a.isPDFAttachment && a.isPDFAttachment()) || (item.isAttachment() ? null : await item.getBestAttachment());
       if (pdf) {
         hasPDF = !!(pdf.isPDFAttachment && pdf.isPDFAttachment());
+        if (hasPDF) pdfID = pdf.id;
         fulltext = (await pdf.attachmentText) || "";
         if (!fulltext.trim() && hasPDF) {
           // Not extracted yet: ask Zotero to index this PDF now, then read again.
           try { await Zotero.Fulltext.indexItems([pdf.id]); } catch (e) { Zotero.logError(e); }
           fulltext = (await pdf.attachmentText) || "";
+        }
+        if (hasPDF) {
+          pages = await this.getPages(pdf);
+          if (pages) fulltext = pages.map((t, i) => "[page " + (i + 1) + "]\n" + t.trim()).join("\n\n");
         }
       }
     } catch (e) { Zotero.logError(e); }
@@ -223,6 +280,8 @@ var ReadingCoach = {
       zoteroURI,
       citekey,
       hasPDF,
+      pdfID,
+      pages,
       notePattern: this.settings().noteName
     };
   },

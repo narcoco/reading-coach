@@ -98,3 +98,7 @@ body.pane .chat { max-height: 50vh; }
 .clipmeta select { width: auto; flex: 0 0 auto; font-size: 13px; padding: 4px 6px; }
 .clipmeta input { flex: 1; min-width: 0; }
 .fb.plain .quote { margin: 6px 0; }
+
+.steps button.open { cursor: pointer; }
+.steps button.open:hover, .steps button.done:hover { border-color: var(--accent); }
+.steps button.pdf { margin-left: auto; color: var(--accent); }

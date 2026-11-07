@@ -47,7 +47,7 @@ var RC = (function () {
     ["questions", "Questions"],
     ["evidence", "Figure and limit"],
     ["discuss", "Discuss"],
-    ["close", "Takeaway"]
+    ["close", "Takeaway and save"]
   ];
 
   /* ---------- Small helpers ---------- */
@@ -303,7 +303,7 @@ var RC = (function () {
       "theory: " + yamlStr(oneLine((rec.glance || {}).theory).slice(0, 300)),
       "methods: " + yamlStr(oneLine((rec.glance || {}).methods).slice(0, 300)),
       "guess_match: " + (rec.guessMark || '""'),
-      "score: " + yamlStr(rec.questions.filter(q => q.verdict === "right").length + "/" + rec.questions.length),
+      "score: " + yamlStr((rec.questions || []).length ? rec.questions.filter(q => q.verdict === "right").length + "/" + rec.questions.length : ""),
       "tags: [paper]",
       "---"
     ].join("\n");
@@ -329,29 +329,36 @@ var RC = (function () {
         mine.forEach(c => body.push(...quoteLines(c)));
       });
     }
-    body.push("## My takeaway", rec.takeaway.trim(), "");
-    body.push("- Stance: " + (STANCE[rec.stance] || "not set"));
-    body.push("- Evidence: " + (EVIDENCE[rec.evidence] || "not set"));
-    if (rec.linkTo) body.push("- Connects to [[" + rec.linkTo.replace(/\.md$/, "") + "]]" + (rec.linkNote ? ": " + oneLine(rec.linkNote) : ""));
-    body.push("");
-    body.push("## Before reading", "My guess: " + (oneLine(rec.guess) || "none") + (rec.guessMark ? " (close? " + rec.guessMark + ")" : ""));
-    (rec.predict || []).filter(p => p.a && p.a.trim()).forEach(p => body.push("- " + oneLine(p.q) + " → " + oneLine(p.a)));
-    body.push("");
+    const takeaway = String(rec.takeaway || "").trim();
+    const meta = [];
+    if (rec.stance) meta.push("- Stance: " + STANCE[rec.stance]);
+    if (rec.evidence) meta.push("- Evidence: " + EVIDENCE[rec.evidence]);
+    if (rec.linkTo) meta.push("- Connects to [[" + rec.linkTo.replace(/\.md$/, "") + "]]" + (rec.linkNote ? ": " + oneLine(rec.linkNote) : ""));
+    if (takeaway || meta.length) body.push("## My takeaway", takeaway || "_Not written yet._", "", ...meta, "");
+    const predicted = (rec.predict || []).filter(p => p.a && p.a.trim());
+    if (oneLine(rec.guess) || predicted.length) {
+      body.push("## Before reading");
+      if (oneLine(rec.guess)) body.push("My guess: " + oneLine(rec.guess) + (rec.guessMark ? " (close? " + rec.guessMark + ")" : ""));
+      predicted.forEach(p => body.push("- " + oneLine(p.q) + " → " + oneLine(p.a)));
+      body.push("");
+    }
     const loose = clips.filter(c => !c.section);
     if (loose.length) {
       body.push("## What the paper actually says");
       loose.forEach(c => body.push(...quoteLines(c)));
     }
-    body.push("## Questions");
-    rec.questions.forEach((q, i) => {
+    const qs = rec.questions || [];
+    if (qs.length) body.push("## Questions");
+    qs.forEach((q, i) => {
       body.push((i + 1) + ". **" + q.q + "**");
       body.push("   - My answer: " + (oneLine(q.mine) || "—") + (q.verdict ? " (" + q.verdict + ")" : ""));
       if (q.feedback) body.push("   - Feedback: " + q.feedback);
       body.push("   - In the paper: " + q.answer + (q.where ? " (" + q.where + (q.loc ? ", PDF p. " + q.loc : "") + ")" : q.loc ? " (PDF p. " + q.loc + ")" : ""));
       if (q.readQuote || q.quote) body.push("   - Read: \"" + oneLine(q.readQuote || q.quote) + "\"");
     });
-    body.push("");
-    body.push("## Key figure", oneLine(rec.figure) || "—", "", "## Limitation", oneLine(rec.limit) || "—", "");
+    if (qs.length) body.push("");
+    if (oneLine(rec.figure)) body.push("## Key figure", oneLine(rec.figure), "");
+    if (oneLine(rec.limit)) body.push("## Limitation", oneLine(rec.limit), "");
     if (rec.turns && rec.turns.length) {
       body.push("> [!quote]- Discussion");
       rec.turns.forEach(t => {
@@ -361,10 +368,9 @@ var RC = (function () {
       });
       body.push("");
     }
-    body.push("## Flashcards #flashcards");
-    rec.questions.forEach(q => body.push(cardSafe(q.q) + "::" + cardSafe(q.answer)));
-    body.push(cardSafe("What did " + (lastName((paper.authors || [])[0]) || "this paper") + " " + (paper.year || "") + " show, and what does it mean for my work?") + "::" + cardSafe(rec.takeaway));
-    body.push("");
+    const cards = qs.map(q => cardSafe(q.q) + "::" + cardSafe(q.answer));
+    if (takeaway) cards.push(cardSafe("What did " + (lastName((paper.authors || [])[0]) || "this paper") + " " + (paper.year || "") + " show, and what does it mean for my work?") + "::" + cardSafe(takeaway));
+    if (cards.length) body.push("## Flashcards #flashcards", ...cards, "");
     if (paper.abstract) body.push("> [!abstract]- Abstract", "> " + oneLine(paper.abstract), "");
     return fm + "\n\n" + body.join("\n");
   }
@@ -372,7 +378,7 @@ var RC = (function () {
     const esc = s => String(s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     return "<h2>Reading Coach</h2><p><strong>My takeaway:</strong> " + esc(rec.takeaway) + "</p>" +
       "<p>" + esc(STANCE[rec.stance] || "") + (rec.evidence ? " · " + esc(EVIDENCE[rec.evidence]) : "") +
-      " · Questions right: " + rec.questions.filter(q => q.verdict === "right").length + "/" + rec.questions.length + "</p>" +
+      ((rec.questions || []).length ? " · Questions right: " + rec.questions.filter(q => q.verdict === "right").length + "/" + rec.questions.length : "") + "</p>" +
       (obsidianURL ? '<p><a href="' + esc(obsidianURL) + '">Open the full note in Obsidian</a></p>' : "");
   }
 

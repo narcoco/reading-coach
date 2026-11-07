@@ -42,7 +42,7 @@
     saveTimer = setTimeout(() => { io.saveDraft(paper.key, rec).catch(() => {}); }, 500);
   }
   const ORDER = RC.STEPS.map(s => s[0]);
-  const reached = s => ORDER.indexOf(s) <= ORDER.indexOf(rec.maxStep || rec.step);
+  const visited = s => ORDER.indexOf(s) <= ORDER.indexOf(rec.maxStep || rec.step);
   function go(step) {
     rec.step = step;
     if (ORDER.indexOf(step) > ORDER.indexOf(rec.maxStep || "guess")) rec.maxStep = step;
@@ -124,9 +124,17 @@
   }
   function stepsBar() {
     return h("nav", { class: "steps", "aria-label": "Steps" }, RC.STEPS.map(([k, label], i) => {
-      const cur = rec.step === k, can = reached(k) && !cur;
-      return h("button", { class: cur ? "cur" : can ? "done" : "", disabled: !can && !cur, "aria-current": cur ? "step" : null, on: { click: () => { if (can) go(k); } } }, (i + 1) + ". " + label);
-    }));
+      const cur = rec.step === k;
+      return h("button", { class: cur ? "cur" : visited(k) ? "done" : "open", "aria-current": cur ? "step" : null, on: { click: () => { if (!cur) go(k); } } }, (i + 1) + ". " + label);
+    }).concat(pane || !paper.pdfID ? [] : [h("button", { class: "open pdf", on: { click: openPDF } }, "Open the PDF")]));
+  }
+  async function openPDF() {
+    clearTimeout(saveTimer);
+    try {
+      await io.saveDraft(paper.key, rec);
+      await io.openReader();
+      window.close();
+    } catch (e) { err.reader = e.message; render(); }
   }
   function nav(back, nextLabel, next, nextOK, extra) {
     return h("div", { class: "between" },
@@ -160,7 +168,7 @@
       promptsBlock(),
       h("p", { class: "small" }, "The abstract stays hidden until you've guessed. Guessing first makes the real finding stick. The suggested questions come from the abstract but don't give its findings away."),
       sourceLine(),
-      h("div", { class: "row", style: "justify-content:flex-end" }, h("button", { id: "next-guess", class: "btn primary", disabled: !guessed(), on: { click: () => go("abstract") } }, "Show the abstract")));
+      h("div", { class: "row", style: "justify-content:flex-end" }, h("button", { id: "next-guess", class: "btn primary", on: { click: () => go("abstract") } }, "Show the abstract")));
   }
   function viewAbstract() {
     const marks = [["yes", "Yes"], ["partly", "Partly"], ["no", "No"]];
@@ -174,10 +182,9 @@
         h("span", { class: "seg", role: "group" }, marks.map(([v, t]) => h("button", { "aria-pressed": rec.guessMark === v ? "true" : "false", on: { click: () => { rec.guessMark = v; persist(); render(); } } }, t)))),
       h("div", { class: "between" }, btn("Back", () => go("guess")),
         h("span", { class: "row" },
-          btn("Skip this paper", () => decide("rc-skipped"), "quiet", !rec.guessMark),
-          btn("Keep for later", () => decide("rc-later"), "", !rec.guessMark),
-          btn(pane ? "Study it now" : "Study it with the PDF", studyNow, "primary", !rec.guessMark))),
-      rec.guessMark ? null : h("p", { class: "small" }, "Mark how close your guess was, then decide what to do with this paper."),
+          btn("Skip this paper", () => decide("rc-skipped"), "quiet"),
+          btn("Keep for later", () => decide("rc-later")),
+          btn(pane ? "Study it now" : "Study it with the PDF", studyNow, "primary"))),
       err.reader ? h("p", { class: "note" }, err.reader) : null,
       clipsBox());
   }
@@ -299,7 +306,7 @@
         h("button", { id: "check", class: "btn primary", disabled: busy.check || !rec.questions.every(x => x.mine.trim()), on: { click: checkAnswers } }, busy.check ? ["Checking… ", elapsed()] : "Check my answers"),
         btn("Choose a different focus", () => { rec.questions = []; persist(); render(); }, "quiet", busy.check)));
     }
-    parts.push(nav("abstract", "Next", () => go("evidence"), rec.checked), clipsBox());
+    parts.push(nav("abstract", "Next", () => go("evidence"), true), clipsBox());
     return h("section", { class: "card" }, parts);
   }
   function focusPicker() {
@@ -342,7 +349,7 @@
     return h("section", { class: "card" }, header(),
       textField("Open the figure or table with the main result. What does it show, in one line?", "figure", "e.g. Table 2: prompt group ahead at delayed test, largest gap for low prior knowledge", () => liveEnable("next-ev", ok)),
       textField("What can this study not tell you?", "limit", "e.g. one course, one semester, no follow-up", () => liveEnable("next-ev", ok)),
-      h("div", { class: "between" }, btn("Back", () => go("questions")), h("button", { id: "next-ev", class: "btn primary", disabled: !ok(), on: { click: () => go("discuss") } }, "Next")),
+      h("div", { class: "between" }, btn("Back", () => go("questions")), h("button", { id: "next-ev", class: "btn primary", on: { click: () => go("discuss") } }, "Next")),
       clipsBox());
   }
   function viewDiscuss() {
@@ -366,7 +373,7 @@
     chat(t);
   }
   function viewClose() {
-    const ok = () => rec.takeaway.trim() && rec.stance;
+    const ok = () => true;
     const opts = (map, cur) => [h("option", { value: "" }, "Choose one")].concat(Object.entries(map).map(([k, v]) => h("option", { value: k, selected: cur === k ? "selected" : null }, v)));
     const sel = (label, key, map) => h("label", { class: "f" }, label, h("select", { id: "f-" + key, on: { change: e => { rec[key] = e.target.value; persist(); liveEnable("save", ok); liveEnable("save-new", ok); } } }, opts(map, rec[key])));
     const notes = (notesCache || []).filter(n => n.fm && n.fm.reading_coach && n.name !== RC.fileName(paper));

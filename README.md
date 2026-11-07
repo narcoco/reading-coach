@@ -1,13 +1,13 @@
 # Reading Coach for Zotero
 
-Reads a paper with you in six steps, using your own AI model, and saves the result to Obsidian.
+Reads a paper with you in six steps, using your own AI model, and saves the result to Obsidian. Every step is optional: click any tab to jump to it, and save from **Takeaway and save** whenever you like. The note includes only what you filled in.
 
 1. **Guess**: from the title only. The abstract stays hidden until you guess. You can ask for 1 to 3 questions to guide your guess; they come from the abstract but never give its findings away.
 2. **Abstract**: mark how close your guess was, then skip the paper, keep it for later (tags `rc-skipped` or `rc-later`), or study it now.
 3. **Questions**: choose what to focus on (Findings, Methods, Theory, Limitations) and the model asks one question for each. You answer them all before it checks your answers against the paper. Each check shows the section, an exact quote, and a **Go to page** button that turns the PDF to the right page (or **Copy the quote** to find it with Cmd+F).
 4. **Figure and limit**: one line on the key figure, one on what the study can't tell you.
 5. **Discuss** (optional): a sceptical colleague asks you one question at a time.
-6. **Takeaway**: a **Paper at a glance** (research question, theory, methods, findings, limitations), pre-filled from your answers and the paper for you to rewrite; then your own takeaway, your stance against your position, the kind of evidence, and a link to a paper you've already read.
+6. **Takeaway and save**: a **Paper at a glance** (research question, theory, methods, findings, limitations), pre-filled from your answers and the paper for you to rewrite; then your own takeaway, your stance against your position, the kind of evidence, and a link to a paper you've already read.
 
 The Obsidian note opens with the at-a-glance section. Clips you assign to a section (Theory, Methods and so on) appear under that heading; unsorted clips go under "What the paper actually says".
 
@@ -51,7 +51,7 @@ Download the newest `.xpi` from the [`dist` folder](https://github.com/narcoco/r
 - **Paper text**: when a paper has a PDF, the AI reads its text (up to 100,000 characters, which covers most papers in full; change this in settings). If Zotero hasn't extracted the text yet, Reading Coach asks it to. If there's no PDF, or the PDF is a scanned image with no text, the AI reads the abstract only. The screen always says which.
 - **Privacy**: the paper's text and your answers are sent to the model service you chose. Your API key is stored in Zotero's settings on this computer.
 - **Cost**: one paper costs a few model calls, plus one for each discussion turn. Each call resends the paper text, up to 100,000 characters.
-- **Version**: this is a first version (0.3.0). It is marked compatible with Zotero 7 to 11. Zotero now releases a new major version every 6 to 10 weeks, and each one may need the plugin's version limit raised.
+- **Version**: this is a first version (0.3.1). It is marked compatible with Zotero 7 to 11. Zotero now releases a new major version every 6 to 10 weeks, and each one may need the plugin's version limit raised.
 
 ## Releasing an update
 

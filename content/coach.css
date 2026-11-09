@@ -102,3 +102,14 @@ body.pane .chat { max-height: 50vh; }
 .steps button.open { cursor: pointer; }
 .steps button.open:hover, .steps button.done:hover { border-color: var(--accent); }
 .steps button.pdf { margin-left: auto; color: var(--accent); }
+
+/* Zotero One preview and Ask the paper */
+.preview { background: var(--surface); }
+dl.glance { margin: 0; display: grid; gap: 6px; }
+dl.glance dt { font-weight: 700; font-size: 13px; color: var(--accent); }
+dl.glance dd { margin: 0 0 4px; font-size: 14.5px; line-height: 1.5; }
+.chiprow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.chiprow .pick { text-align: left; }
+.ask .answer { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; display: grid; gap: 6px; }
+.ask .answer select { width: auto; font-size: 13px; padding: 4px 6px; }
+dl.glance dd { white-space: pre-line; }

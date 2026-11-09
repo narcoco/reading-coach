@@ -28,14 +28,115 @@ var RC = (function () {
   };
   const FOCUS_ORDER = ["findings", "methods", "theory", "limits"];
   const GLANCE = [["rq", "Research question"], ["theory", "Theory"], ["methods", "Methods"], ["findings", "Findings"], ["limits", "Limitations"]];
+  const ASK_DEFAULTS = ["What is the sample size, and who took part?", "How did they measure the key variables?", "How did they analyse the data?", "Which theory or framework do they use?", "What is the main result?", "What are the limitations?"];
+
+  /* Zotero note HTML to Markdown. Needs a DOMParser (present in the dialogs). */
+  function htmlToMarkdown(html, Parser) {
+    const P = Parser || (typeof DOMParser !== "undefined" ? DOMParser : null);
+    if (!P) return String(html || "").replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|h\d|li|div)>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\n{3,}/g, "\n\n").trim();
+    const doc = new P().parseFromString("<!doctype html><body>" + String(html || "") + "</body>", "text/html");
+    const inline = node => Array.from(node.childNodes).map(n => {
+      if (n.nodeType === 3) return n.textContent.replace(/\s+/g, " ");
+      if (n.nodeType !== 1) return "";
+      const t = n.tagName.toLowerCase(), c = inline(n);
+      if (t === "strong" || t === "b") return c.trim() ? (/^\s/.test(c) ? " " : "") + "**" + c.trim() + "**" + (/\s$/.test(c) ? " " : "") : c;
+      if (t === "em" || t === "i") return c.trim() ? (/^\s/.test(c) ? " " : "") + "*" + c.trim() + "*" + (/\s$/.test(c) ? " " : "") : c;
+      if (t === "code") return "`" + c + "`";
+      if (t === "br") return "\n";
+      if (t === "a") return n.getAttribute("href") && !/^zotero:/.test(n.getAttribute("href")) ? "[" + c.trim() + "](" + n.getAttribute("href") + ")" : c;
+      if (t === "sup") return "^" + c;
+      return c;
+    }).join("").replace(/ +\n/g, "\n");
+    const block = (node, depth) => Array.from(node.childNodes).map(n => {
+      if (n.nodeType === 3) return n.textContent.trim() ? n.textContent.trim() + "\n\n" : "";
+      if (n.nodeType !== 1) return "";
+      const t = n.tagName.toLowerCase();
+      const m = t.match(/^h([1-6])$/);
+      if (m) return "#".repeat(Math.min(6, Number(m[1]) + 2)) + " " + inline(n).trim() + "\n\n";
+      if (t === "p") return inline(n).trim() ? inline(n).trim() + "\n\n" : "";
+      if (t === "ul" || t === "ol") {
+        let i = 0;
+        return Array.from(n.children).filter(li => li.tagName.toLowerCase() === "li").map(li => {
+          const isList = x => x.nodeType === 1 && /^(ul|ol)$/i.test(x.tagName);
+          const kids = Array.from(li.childNodes);
+          const text = inline({ childNodes: kids.filter(x => !isList(x)) }).replace(/\s+/g, " ").trim();
+          i++;
+          return "  ".repeat(depth) + (t === "ol" ? i + ". " : "- ") + text + "\n" + kids.filter(isList).map(x => block({ childNodes: [x] }, depth + 1)).join("");
+        }).join("") + (depth ? "" : "\n");
+      }
+      if (t === "blockquote") return block(n, depth).trim().split("\n").map(l => "> " + l).join("\n") + "\n\n";
+      if (t === "pre") return "```\n" + n.textContent.trim() + "\n```\n\n";
+      if (t === "hr") return "---\n\n";
+      if (t === "table") {
+        const rows = Array.from(n.querySelectorAll("tr")).map(r => Array.from(r.children).map(c => inline(c).trim().replace(/\|/g, "\\|")));
+        if (!rows.length) return "";
+        const w = Math.max(...rows.map(r => r.length));
+        const line = r => "| " + Array.from({ length: w }, (_, i) => r[i] || "").join(" | ") + " |";
+        return [line(rows[0]), "|" + " --- |".repeat(w)].concat(rows.slice(1).map(line)).join("\n") + "\n\n";
+      }
+      if (t === "img") return "";
+      return block(n, depth);
+    }).join("");
+    return block(doc.body, 0).replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  /* Pull the five at-a-glance fields out of a structured note by its headings. */
+  const GLANCE_HEADS = {
+    rq: /research question|research aim|\baims?\b|objective|purpose|研究问题|研究目的|研究目标/i,
+    theory: /theor|framework|理论|框架/i,
+    methods: /method|design|participant|sample|data collection|研究方法|方法|样本|数据/i,
+    findings: /finding|result|主要发现|发现|结果/i,
+    limits: /limitation|weakness|局限|不足/i
+  };
+  function glanceFromHeadings(md) {
+    const out = { rq: "", theory: "", methods: "", findings: "", limits: "" };
+    const parts = String(md || "").split(/\n(?=#{1,6} )/);
+    parts.forEach(sec => {
+      const m = sec.match(/^#{1,6} (.+)\n?([\s\S]*)$/);
+      if (!m) return;
+      const head = m[1];
+      const body = m[2].split("\n").filter(l => !/^\s*\|/.test(l)).join("\n").replace(/\n{2,}/g, "\n").trim();
+      if (!body) return;
+      for (const k of Object.keys(GLANCE_HEADS)) {
+        if (!out[k] && GLANCE_HEADS[k].test(head)) { out[k] = body.length > 700 ? body.slice(0, 700).replace(/\s+\S*$/, "") + " …" : body; break; }
+      }
+    });
+    return { fields: out, found: Object.values(out).filter(Boolean).length };
+  }
+  function glanceMessages(noteMarkdown, settings) {
+    return [
+      { role: "system", content: "You condense a researcher's existing reading notes. Use only the notes given." },
+      { role: "user", content: [
+        "Below is a detailed reading of a paper that the researcher generated earlier.",
+        "<<<", clip(noteMarkdown, 40000), ">>>",
+        "Fill in five fields from it, each in one to three sentences, in the same language as the notes: research question, theory or framework, methods (design, sample, data, analysis), main findings, limitations.",
+        "If the notes don't cover a field, leave it as an empty string.",
+        'Reply with only JSON: {"rq":"...","theory":"...","methods":"...","findings":"...","limits":"..."}'
+      ].join("\n") }
+    ];
+  }
+  function askMessages(paper, settings, question) {
+    return [
+      { role: "system", content: SYSTEM },
+      { role: "user", content: context(paper, settings) + "\n\n" + [
+        "The researcher asks: " + question,
+        "Answer from the paper only, in one to three sentences, with the specific details (numbers, instruments, procedures) the paper reports.",
+        'If the paper does not report it, say so plainly and set "found" to false.',
+        ...locateRules(paper),
+        'Reply with only JSON: {"answer":"...","found":true,"where":"...","page":4,"quote":"..."}'
+      ].join("\n") }
+    ];
+  }
   function prefillGlance(rec) {
     const g = Object.assign({ rq: "", theory: "", methods: "", findings: "", limits: "" }, rec.glance || {});
+    const pv = rec.preview || {};
     const best = k => {
       const q = (rec.questions || []).find(x => x.focus === k);
-      if (!q) return "";
-      return q.verdict === "right" && String(q.mine || "").trim() ? String(q.mine).trim() : q.answer;
+      if (q && q.verdict === "right" && String(q.mine || "").trim()) return String(q.mine).trim();
+      if (pv[k]) return pv[k];
+      return q ? q.answer : "";
     };
-    if (!g.rq) g.rq = rec.rq || "";
+    if (!g.rq) g.rq = pv.rq || rec.rq || "";
     ["theory", "methods", "findings", "limits"].forEach(k => { if (!g[k]) g[k] = best(k); });
     if (rec.figure && !g.findings.includes(rec.figure)) g.findings = (g.findings ? g.findings + " " : "") + "Key figure: " + oneLine(rec.figure);
     if (rec.limit && !g.limits.includes(rec.limit)) g.limits = (g.limits ? g.limits + " " : "") + oneLine(rec.limit);
@@ -318,6 +419,13 @@ var RC = (function () {
       return out;
     };
     const g = rec.glance || {};
+    (rec.asks || []).forEach(a => { if (!a.loc) a.loc = locate(paper, a.quote, a.page); });
+    const askLines = a => {
+      const out = ["**Q: " + oneLine(a.q) + "**", oneLine(a.answer) + (a.loc ? " (PDF p. " + a.loc + ")" : "")];
+      if (a.quote) out.push("> " + oneLine(a.quote));
+      out.push("");
+      return out;
+    };
     if (GLANCE.some(([k]) => (g[k] || "").trim()) || clips.some(c => c.section)) {
       body.push("## At a glance", "");
       GLANCE.forEach(([k, label]) => {
@@ -327,6 +435,7 @@ var RC = (function () {
         if ((g[k] || "").trim()) body.push(String(g[k]).trim());
         body.push("");
         mine.forEach(c => body.push(...quoteLines(c)));
+        (rec.asks || []).filter(a => a.section === k && a.answer).forEach(a => body.push(...askLines(a)));
       });
     }
     const takeaway = String(rec.takeaway || "").trim();
@@ -342,6 +451,11 @@ var RC = (function () {
       predicted.forEach(p => body.push("- " + oneLine(p.q) + " → " + oneLine(p.a)));
       body.push("");
     }
+    const myQs = (rec.asks || []).filter(a => !a.section && a.answer);
+    if (myQs.length) {
+      body.push("## My questions to the paper");
+      myQs.forEach(a => body.push(...askLines(a)));
+    }
     const loose = clips.filter(c => !c.section);
     if (loose.length) {
       body.push("## What the paper actually says");
@@ -349,6 +463,7 @@ var RC = (function () {
     }
     const qs = rec.questions || [];
     if (qs.length) body.push("## Questions");
+    qs.forEach(q => { if (!q.loc) q.loc = locate(paper, q.readQuote || q.quote, q.readPage || q.page); });
     qs.forEach((q, i) => {
       body.push((i + 1) + ". **" + q.q + "**");
       body.push("   - My answer: " + (oneLine(q.mine) || "—") + (q.verdict ? " (" + q.verdict + ")" : ""));
@@ -371,6 +486,11 @@ var RC = (function () {
     const cards = qs.map(q => cardSafe(q.q) + "::" + cardSafe(q.answer));
     if (takeaway) cards.push(cardSafe("What did " + (lastName((paper.authors || [])[0]) || "this paper") + " " + (paper.year || "") + " show, and what does it mean for my work?") + "::" + cardSafe(takeaway));
     if (cards.length) body.push("## Flashcards #flashcards", ...cards, "");
+    if (rec.aiMarkdown) {
+      body.push("> [!summary]- Detailed reading" + (rec.aiTitle ? ": " + oneLine(rec.aiTitle) : ""));
+      String(rec.aiMarkdown).split("\n").forEach(l => body.push(l ? "> " + l : ">"));
+      body.push("");
+    }
     if (paper.abstract) body.push("> [!abstract]- Abstract", "> " + oneLine(paper.abstract), "");
     return fm + "\n\n" + body.join("\n");
   }
@@ -433,6 +553,6 @@ var RC = (function () {
     ].join("\n");
   }
 
-  return { GLANCE, prefillGlance, FOCUS, FOCUS_ORDER, locate, sourceInfo, predictMessages, cleanPrompts, split, clipSource, STANCE, EVIDENCE, STEPS, parseJSON, cleanQuestions, cleanResults, questionsMessages, checkMessages, discussMessages, trendMessages, fileName, buildNote, zoteroNoteHTML, parseFrontmatter, buildTable, trendNote, today, oneLine };
+  return { ASK_DEFAULTS, htmlToMarkdown, glanceFromHeadings, glanceMessages, askMessages, GLANCE, prefillGlance, FOCUS, FOCUS_ORDER, locate, sourceInfo, predictMessages, cleanPrompts, split, clipSource, STANCE, EVIDENCE, STEPS, parseJSON, cleanQuestions, cleanResults, questionsMessages, checkMessages, discussMessages, trendMessages, fileName, buildNote, zoteroNoteHTML, parseFrontmatter, buildTable, trendNote, today, oneLine };
 })();
 if (typeof module === "object" && module.exports) module.exports = RC;

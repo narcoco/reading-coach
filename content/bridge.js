@@ -142,7 +142,8 @@ var ReadingCoach = {
       field: String(p("field") || ""),
       position: String(p("position") || ""),
       maxChars: Number(p("maxChars")) || 100000,
-      focus: String(p("focus") || "findings,methods,theory,limits").split(",").map(x => x.trim()).filter(Boolean)
+      focus: String(p("focus") || "findings,methods,theory,limits").split(",").map(x => x.trim()).filter(Boolean),
+      askChips: String(p("askChips") || "").split(/\n+/).map(x => x.trim()).filter(Boolean)
     };
   },
   openPrefs() { Zotero.Utilities.Internal.openPreferences(this.paneID || undefined); },
@@ -279,11 +280,22 @@ var ReadingCoach = {
       fulltext,
       zoteroURI,
       citekey,
+      aiNotes: this.otherNotes(item),
       hasPDF,
       pdfID,
       pages,
       notePattern: this.settings().noteName
     };
+  },
+  /* The paper's other notes (for example Zotero One's detailed reading), longest first. */
+  otherNotes(item) {
+    try {
+      if (!item.isRegularItem()) return [];
+      return item.getNotes().map(id => Zotero.Items.get(id))
+        .filter(n => !n.getNote().startsWith("<h2>Reading Coach</h2>"))
+        .map(n => ({ id: n.id, title: (n.getNoteTitle() || "Untitled note").slice(0, 90), html: n.getNote(), chars: n.getNote().length, modified: n.dateModified }))
+        .sort((a, b) => b.chars - a.chars);
+    } catch (e) { Zotero.logError(e); return []; }
   },
   async addTag(itemID, tag) {
     const item = Zotero.Items.get(itemID);

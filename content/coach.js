@@ -3,7 +3,8 @@
   "use strict";
   const NS = "http://www.w3.org/1999/xhtml";
   let io, paper, settings, rec, app, saveTimer, notesCache = null, pane = false, clipsOpen = true, resizeObs = null;
-  const busy = { questions: false, check: false, chat: false, save: false, predict: false };
+  const busy = { questions: false, check: false, chat: false, save: false, predict: false, preview: false, ask: false };
+  let askOpen = true;
   let started = 0, ticker = null, runID = 0;
   function startClock() {
     started = Date.now();
@@ -11,7 +12,7 @@
     ticker = setInterval(() => {
       const s = Math.round((Date.now() - started) / 1000);
       document.querySelectorAll(".elapsed").forEach(el => { el.textContent = s + " s"; });
-      if (!busy.questions && !busy.check && !busy.chat && !busy.predict) clearInterval(ticker);
+      if (!busy.questions && !busy.check && !busy.chat && !busy.predict && !busy.preview && !busy.ask) clearInterval(ticker);
     }, 1000);
   }
   const elapsed = () => h("span", { class: "elapsed small" }, Math.round((Date.now() - started) / 1000) + " s");
@@ -35,7 +36,7 @@
   const fbox = (text, cls) => h("p", { class: "fb " + cls, role: "status" }, text);
 
   function blank() {
-    return { step: "guess", guess: "", guessMark: "", questions: [], checked: false, figure: "", limit: "", turns: [], takeaway: "", stance: "", evidence: "", linkTo: "", linkNote: "", savedPath: "", clips: [], predict: [], focus: null, rq: "", glance: null };
+    return { step: "guess", guess: "", guessMark: "", questions: [], checked: false, figure: "", limit: "", turns: [], takeaway: "", stance: "", evidence: "", linkTo: "", linkNote: "", savedPath: "", clips: [], predict: [], focus: null, rq: "", glance: null, preview: null, aiNoteID: 0, includeAI: true, asks: [] };
   }
   function persist() {
     clearTimeout(saveTimer);
@@ -51,6 +52,7 @@
     window.scrollTo(0, 0);
     if (pane && io.scrollIntoView) io.scrollIntoView();
     if (step === "close" && !rec.glanceFilled) { rec.glance = RC.prefillGlance(rec); rec.glanceFilled = true; persist(); render(); }
+    if (step === "abstract" && aiNote() && !rec.preview && !busy.preview) makePreview();
   }
 
   /* ---------- Model calls ---------- */
@@ -68,6 +70,88 @@
     } catch (e) { if (my !== runID) return; err.questions = e.message; }
     busy.questions = false; render();
   }
+  /* ---------- Zotero One's note: preview and detailed reading ---------- */
+  function aiNote() {
+    const list = paper.aiNotes || [];
+    return list.find(n => n.id === rec.aiNoteID) || list[0] || null;
+  }
+  async function makePreview() {
+    const n = aiNote();
+    if (!n) return;
+    busy.preview = true; err.preview = ""; startClock(); render();
+    try {
+      const md = RC.htmlToMarkdown(n.html);
+      const byHead = RC.glanceFromHeadings(md);
+      if (byHead.found >= 3) { rec.preview = byHead.fields; rec.previewFrom = "headings"; }
+      else {
+        const r = RC.parseJSON(await io.llm(RC.glanceMessages(md, settings)));
+        rec.preview = { rq: RC.oneLine(r.rq), theory: RC.oneLine(r.theory), methods: RC.oneLine(r.methods), findings: RC.oneLine(r.findings), limits: RC.oneLine(r.limits) };
+        rec.previewFrom = "ai";
+      }
+      rec.previewNote = n.id;
+      persist();
+    } catch (e) { err.preview = e.message; }
+    busy.preview = false; render();
+  }
+  function noteChooser(onChange) {
+    const list = paper.aiNotes || [];
+    if (list.length < 2) return list.length ? h("span", { class: "small" }, "From your note: " + list[0].title) : null;
+    return h("label", { class: "row small" }, "From your note:",
+      h("select", { "aria-label": "Which note", on: { change: e => { rec.aiNoteID = Number(e.target.value); persist(); if (onChange) onChange(); else render(); } } },
+        list.map(n => h("option", { value: n.id, selected: aiNote() && aiNote().id === n.id ? "selected" : null }, n.title + " (" + Math.round(n.chars / 1000) + "k)"))));
+  }
+  function previewBox() {
+    if (!(paper.aiNotes || []).length) return null;
+    const pv = rec.preview;
+    return h("div", { class: "q preview" },
+      h("div", { class: "between" }, h("p", { class: "eyebrow" }, "Paper at a glance · from Zotero One"), noteChooser(() => { rec.preview = null; makePreview(); })),
+      busy.preview ? h("p", { class: "busy" }, "Reading your Zotero One note… ", elapsed())
+      : err.preview ? [h("p", { class: "fb error" }, err.preview), btn("Try again", makePreview, "small")]
+      : pv ? [
+          h("dl", { class: "glance" }, RC.GLANCE.filter(([k]) => pv[k]).map(([k, label]) => [h("dt", {}, label), h("dd", {}, String(pv[k]).replace(/\*\*?([^*]+)\*\*?/g, "$1").replace(/^\s*[-*] /gm, "• "))])),
+          h("p", { class: "small" }, (rec.previewFrom === "ai" ? "Condensed from your note by the model. " : "Taken from your note's headings. ") + "These fields pre-fill your note's Paper at a glance, for you to edit when you save."),
+          btn("Rebuild the preview", () => { rec.preview = null; makePreview(); }, "quiet small")]
+      : btn("Preview the paper at a glance", makePreview, "small"));
+  }
+
+  /* ---------- Ask the paper ---------- */
+  async function askPaper(question) {
+    question = RC.oneLine(question);
+    if (!question || busy.ask) return;
+    const a = { id: Date.now().toString(36), q: question, answer: "", where: "", page: 0, quote: "", found: true, section: "" };
+    rec.asks.unshift(a);
+    busy.ask = true; err.ask = ""; askOpen = true; startClock(); render();
+    try {
+      const r = RC.parseJSON(await io.llm(RC.askMessages(paper, settings, question)));
+      Object.assign(a, { answer: RC.oneLine(r.answer), where: RC.oneLine(r.where), page: Number(r.page) || 0, quote: RC.oneLine(r.quote), found: r.found !== false });
+      if (!a.answer) throw new Error("The model didn't return an answer.");
+      persist();
+    } catch (e) { err.ask = e.message; rec.asks = rec.asks.filter(x => x !== a); }
+    busy.ask = false; render();
+  }
+  function askBox() {
+    const chips = (settings.askChips && settings.askChips.length ? settings.askChips : RC.ASK_DEFAULTS);
+    const send = () => { const el = document.getElementById("ask"); if (el && el.value.trim()) { const v = el.value; el.value = ""; askPaper(v); } };
+    return h("details", { class: "clips ask", open: askOpen ? "open" : null, on: { toggle: e => { askOpen = e.target.open; } } },
+      h("summary", {}, "Ask the paper" + (rec.asks.length ? " (" + rec.asks.length + ")" : "")),
+      h("div", { class: "chiprow" }, chips.map(c => h("button", { class: "pick", disabled: busy.ask ? "disabled" : null, on: { click: () => askPaper(c) } }, c))),
+      h("div", { class: "row paste" },
+        h("input", { type: "text", id: "ask", placeholder: "Ask anything, e.g. How long was the intervention?", "aria-label": "Your question", on: { keydown: e => { if (e.key === "Enter") { e.preventDefault(); send(); } } } }),
+        btn(busy.ask ? "Asking…" : "Ask", send, "small primary", busy.ask)),
+      busy.ask ? h("p", { class: "busy" }, "Looking in the paper… ", elapsed()) : null,
+      err.ask ? h("p", { class: "fb error" }, err.ask) : null,
+      rec.asks.filter(a => a.answer).map(a => h("div", { class: "answer" },
+        h("p", {}, h("b", {}, a.q)),
+        h("p", { class: a.found ? "" : "small" }, a.answer),
+        whereRow(a),
+        h("div", { class: "row" },
+          h("select", { "aria-label": "Where this goes in your note", on: { change: e => { a.section = e.target.value; persist(); } } },
+            [h("option", { value: "" }, "Note: My questions"), h("option", { value: "skip", selected: a.section === "skip" ? "selected" : null }, "Leave out of the note")]
+              .concat(RC.GLANCE.map(([k, label]) => h("option", { value: k, selected: a.section === k ? "selected" : null }, "Note: " + label)))),
+          btn("Remove", () => { rec.asks = rec.asks.filter(x => x !== a); persist(); render(); }, "quiet small")))));
+  }
+  function extras() { return [askBox(), clipsBox()]; }
+
   async function suggestPrompts() {
     busy.predict = true; err.predict = ""; startClock(); render();
     try {
@@ -108,6 +192,9 @@
     busy.save = true; err.save = ""; render();
     try {
       rec.finishedAt = Date.now();
+      const n = aiNote();
+      rec.aiMarkdown = rec.includeAI && n ? RC.htmlToMarkdown(n.html) : "";
+      rec.aiTitle = rec.includeAI && n ? n.title : "";
       const r = await io.savePaperNote(paper, rec, mode);
       rec.savedPath = r.path; rec.savedName = r.name; rec.tableCount = r.count;
       rec.step = "saved";
@@ -173,8 +260,8 @@
   function viewAbstract() {
     const marks = [["yes", "Yes"], ["partly", "Partly"], ["no", "No"]];
     return h("section", { class: "card" }, header(),
-      h("div", { class: "fb plain" }, rec.guess.trim() ? h("p", {}, h("b", {}, "You guessed: "), rec.guess) : null,
-        rec.predict.filter(p => p.a.trim()).map(p => h("p", {}, h("b", {}, p.q + " "), p.a))),
+      rec.guess.trim() || rec.predict.some(p => p.a.trim()) ? h("div", { class: "fb plain" }, rec.guess.trim() ? h("p", {}, h("b", {}, "You guessed: "), rec.guess) : null,
+        rec.predict.filter(p => p.a.trim()).map(p => h("p", {}, h("b", {}, p.q + " "), p.a))) : null,
       h("div", {}, h("p", { class: "eyebrow" }, "Abstract"),
         paper.abstract ? [h("p", { class: "reading" }, abstractSentences()), h("p", { class: "small" }, "Click a sentence, or drag it into My clips, to keep what the paper actually says.")]
           : h("p", { class: "small" }, "Zotero has no abstract for this paper. Open the PDF and read its abstract now.")),
@@ -186,7 +273,8 @@
           btn("Keep for later", () => decide("rc-later")),
           btn(pane ? "Study it now" : "Study it with the PDF", studyNow, "primary"))),
       err.reader ? h("p", { class: "note" }, err.reader) : null,
-      clipsBox());
+      previewBox(),
+      ...extras());
   }
   async function decide(tag) {
     try { await io.addTag(tag); } catch (e) { /* tagging is a convenience */ }
@@ -296,6 +384,7 @@
         parts.push(h("div", { class: "q" },
           h("b", {}, q.focus ? h("span", { class: "chip focus" }, RC.FOCUS[q.focus][0]) : null, " ", (i + 1) + ". " + q.q),
           h("textarea", { id: "ans-" + i, "aria-label": "Your answer to question " + (i + 1), readonly: rec.checked ? "readonly" : null, value: q.mine, placeholder: "Your answer", on: { input: e => { q.mine = e.target.value; persist(); liveEnable("check", () => rec.questions.every(x => x.mine.trim())); } } }),
+          !rec.checked && (q.quote || q.page) ? (q.showWhere ? h("div", { class: "fb plain" }, whereRow(q)) : btn("Show me where", () => { q.showWhere = true; persist(); render(); }, "quiet small")) : null,
           rec.checked ? [
             h("p", { class: "fb " + q.verdict }, h("span", { class: "chip " + q.verdict }, q.verdict), " ", q.feedback),
             h("div", { class: "fb plain" }, h("p", {}, h("b", {}, "In the paper: "), q.answer), whereRow(q))
@@ -306,7 +395,7 @@
         h("button", { id: "check", class: "btn primary", disabled: busy.check || !rec.questions.every(x => x.mine.trim()), on: { click: checkAnswers } }, busy.check ? ["Checking… ", elapsed()] : "Check my answers"),
         btn("Choose a different focus", () => { rec.questions = []; persist(); render(); }, "quiet", busy.check)));
     }
-    parts.push(nav("abstract", "Next", () => go("evidence"), true), clipsBox());
+    parts.push(nav("abstract", "Next", () => go("evidence"), true), ...extras());
     return h("section", { class: "card" }, parts);
   }
   function focusPicker() {
@@ -350,7 +439,7 @@
       textField("Open the figure or table with the main result. What does it show, in one line?", "figure", "e.g. Table 2: prompt group ahead at delayed test, largest gap for low prior knowledge", () => liveEnable("next-ev", ok)),
       textField("What can this study not tell you?", "limit", "e.g. one course, one semester, no follow-up", () => liveEnable("next-ev", ok)),
       h("div", { class: "between" }, btn("Back", () => go("questions")), h("button", { id: "next-ev", class: "btn primary", on: { click: () => go("discuss") } }, "Next")),
-      clipsBox());
+      ...extras());
   }
   function viewDiscuss() {
     const parts = [header(), h("p", { class: "small" }, "A sceptical colleague asks you one question at a time. It points you back to the paper instead of explaining. This step is optional.")];
@@ -363,7 +452,7 @@
       parts.push(h("div", { class: "row" }, btn("Start the discussion", () => chat(""), "primary")));
     }
     if (err.chat) parts.push(fbox(err.chat, "error"));
-    parts.push(nav("evidence", rec.turns.length ? "Finish and write my takeaway" : "Skip to my takeaway", () => go("close"), !busy.chat), clipsBox());
+    parts.push(nav("evidence", rec.turns.length ? "Finish and write my takeaway" : "Skip to my takeaway", () => go("close"), !busy.chat), ...extras());
     return h("section", { class: "card" }, parts);
   }
   function send() {
@@ -390,12 +479,15 @@
       parts.push(h("p", { class: "small" }, "Loading your earlier notes…"));
     }
     if (err.save) parts.push(fbox(err.save, "error"), h("div", { class: "row" }, btn("Open settings", () => io.openPrefs())));
-    if (rec.exists) parts.push(h("p", { class: "note" }, "You already have a note for this paper in Obsidian. Replace it, or save this reading as a separate note."));
+    if ((paper.aiNotes || []).length) parts.push(h("div", { class: "row" },
+      h("label", { class: "row" }, h("input", { type: "checkbox", id: "f-ai", checked: rec.includeAI ? "checked" : null, on: { change: e => { rec.includeAI = e.target.checked; persist(); } } }), "Add the detailed reading from Zotero One (folded, at the end)"),
+      noteChooser()));
+        if (rec.exists) parts.push(h("p", { class: "note" }, "You already have a note for this paper in Obsidian. Replace it, or save this reading as a separate note."));
     parts.push(h("div", { class: "between" }, btn("Back", () => go("discuss")),
       h("span", { class: "row" },
         rec.exists ? h("button", { id: "save-new", class: "btn", disabled: !ok() || busy.save, on: { click: () => save("new") } }, "Save as a new note") : null,
         h("button", { id: "save", class: "btn primary", disabled: !ok() || busy.save, on: { click: () => save("replace") } }, busy.save ? "Saving…" : rec.exists ? "Replace the note" : "Save to Obsidian"))));
-    parts.push(h("p", { class: "small" }, "Saves the note with your clips and flashcards, adds a short note in Zotero, and rebuilds your reading table."), clipsBox());
+    parts.push(h("p", { class: "small" }, "Saves the note with your clips and flashcards, adds a short note in Zotero, and rebuilds your reading table."), ...extras());
     return h("section", { class: "card" }, parts);
   }
   function viewSaved() {
@@ -441,6 +533,8 @@
       if (rec.step === "saved") rec.step = "close";
       if (!Array.isArray(rec.clips)) rec.clips = [];
       if (!Array.isArray(rec.predict)) rec.predict = [];
+      if (!Array.isArray(rec.asks)) rec.asks = [];
+      if (rec.step === "abstract" && aiNote() && !rec.preview) makePreview();
       render();
     } catch (e) {
       app.replaceChildren(fbox("Couldn't open this paper: " + e.message, "error"));

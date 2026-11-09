@@ -10,3 +10,4 @@ pref("extensions.readingcoach.field", "");
 pref("extensions.readingcoach.position", "");
 pref("extensions.readingcoach.maxChars", 100000);
 pref("extensions.readingcoach.focus", "findings,methods,theory,limits");
+pref("extensions.readingcoach.askChips", "What is the sample size, and who took part?\nHow did they measure the key variables?\nHow did they analyse the data?\nWhich theory or framework do they use?\nWhat is the main result?\nWhat are the limitations?");

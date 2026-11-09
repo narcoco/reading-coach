@@ -100,9 +100,37 @@
       h("select", { "aria-label": "Which note", on: { change: e => { rec.aiNoteID = Number(e.target.value); persist(); if (onChange) onChange(); else render(); } } },
         list.map(n => h("option", { value: n.id, selected: aiNote() && aiNote().id === n.id ? "selected" : null }, n.title + " (" + Math.round(n.chars / 1000) + "k)"))));
   }
+  async function previewFromPDF() {
+    busy.preview = true; err.preview = ""; startClock(); render();
+    try {
+      const r = RC.parseJSON(await io.llm(RC.previewMessages(paper, settings)));
+      rec.preview = { rq: RC.oneLine(r.rq), theory: RC.oneLine(r.theory), methods: RC.oneLine(r.methods), findings: RC.oneLine(r.findings), limits: RC.oneLine(r.limits) };
+      rec.previewFrom = "pdf";
+      persist();
+    } catch (e) { err.preview = e.message; }
+    busy.preview = false; render();
+  }
+  async function checkNotesAgain() {
+    try { paper.aiNotes = await io.refreshNotes(); } catch (e) { err.preview = e.message; }
+    if ((paper.aiNotes || []).length) { rec.preview = null; makePreview(); }
+    else { err.preview = "Still no Zotero One note on this paper."; render(); }
+  }
   function previewBox() {
-    if (!(paper.aiNotes || []).length) return null;
     const pv = rec.preview;
+    if (!(paper.aiNotes || []).length) {
+      const src = RC.sourceInfo(paper, settings);
+      return h("div", { class: "q preview" },
+        h("p", { class: "eyebrow" }, "Paper at a glance" + (pv && rec.previewFrom === "pdf" ? " · from the PDF" : "")),
+        busy.preview ? h("p", { class: "busy" }, "Reading the paper… ", elapsed())
+        : pv ? [
+            h("dl", { class: "glance" }, RC.GLANCE.filter(([k]) => pv[k]).map(([k, label]) => [h("dt", {}, label), h("dd", {}, pv[k])])),
+            h("p", { class: "small" }, "Written by your model from the " + (src.kind === "abstract" ? "abstract" : "PDF") + ". These fields pre-fill your note's Paper at a glance, for you to edit when you save."),
+            h("div", { class: "row" }, btn("Rebuild the preview", previewFromPDF, "quiet small"), btn("Check for a Zotero One note", checkNotesAgain, "quiet small"))]
+        : [
+            h("p", { class: "small" }, "This paper has no Zotero One note yet. Run Zotero One on it and click Check again, or get a preview from the " + (src.kind === "abstract" ? "abstract" : "PDF") + " with your model (one call)."),
+            err.preview ? h("p", { class: "fb hint" }, err.preview) : null,
+            h("div", { class: "row" }, btn("Preview from the " + (src.kind === "abstract" ? "abstract" : "PDF"), previewFromPDF, "small primary"), btn("Check again", checkNotesAgain, "small"))]);
+    }
     return h("div", { class: "q preview" },
       h("div", { class: "between" }, h("p", { class: "eyebrow" }, "Paper at a glance · from Zotero One"), noteChooser(() => { rec.preview = null; makePreview(); })),
       busy.preview ? h("p", { class: "busy" }, "Reading your Zotero One note… ", elapsed())

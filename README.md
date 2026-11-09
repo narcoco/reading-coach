@@ -15,7 +15,7 @@ When you choose **Study it with the PDF**, the paper opens in Zotero's reader an
 
 **My clips:** after the abstract, keep what the paper actually says. Click an abstract sentence, drag text or highlights in from the PDF, or paste a passage. Each clip can carry a short note, and all of them go into the Obsidian note.
 
-**Zotero One (or any AI note on the paper):** if the paper already has a detailed AI reading as a Zotero note, Reading Coach shows a **Paper at a glance** preview from it after the abstract, uses it to pre-fill the at-a-glance fields when you save, and adds the full reading to the end of your Obsidian note in a folded section. It reads the note's headings (in English or Chinese) and only calls the model when the note has none.
+**Zotero One (or any AI note on the paper):** if the paper already has a detailed AI reading as a Zotero note, Reading Coach shows a **Paper at a glance** preview from it after the abstract, uses it to pre-fill the at-a-glance fields when you save, and adds the full reading to the end of your Obsidian note in a folded section. It reads the note's headings (in English or Chinese) and only calls the model when the note has none. If a paper has no Zotero One note, the box offers **Check again** (after you run Zotero One) or **Preview from the PDF**, which builds the same preview with your model in one call.
 
 **Ask the paper:** from the abstract onwards, ask your own questions (quick buttons for sample size, measures, analysis, theory, main result and limitations; edit them in settings). Each answer comes with a quote and a **Go to page** button, and you choose where it goes in your note: under a Paper at a glance heading, under "My questions to the paper", or left out. On the Questions step, **Show me where** points to the passage without giving the answer.
 
@@ -55,7 +55,7 @@ Download the newest `.xpi` from the [`dist` folder](https://github.com/narcoco/r
 - **Paper text**: when a paper has a PDF, the AI reads its text (up to 100,000 characters, which covers most papers in full; change this in settings). If Zotero hasn't extracted the text yet, Reading Coach asks it to. If there's no PDF, or the PDF is a scanned image with no text, the AI reads the abstract only. The screen always says which.
 - **Privacy**: the paper's text and your answers are sent to the model service you chose. Your API key is stored in Zotero's settings on this computer.
 - **Cost**: one paper costs a few model calls, plus one for each discussion turn. Each call resends the paper text, up to 100,000 characters.
-- **Version**: this is a first version (0.4.0). It is marked compatible with Zotero 7 to 11. Zotero now releases a new major version every 6 to 10 weeks, and each one may need the plugin's version limit raised.
+- **Version**: this is a first version (0.4.1). It is marked compatible with Zotero 7 to 11. Zotero now releases a new major version every 6 to 10 weeks, and each one may need the plugin's version limit raised.
 
 ## Releasing an update
 

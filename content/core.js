@@ -115,6 +115,17 @@ var RC = (function () {
       ].join("\n") }
     ];
   }
+  function previewMessages(paper, settings) {
+    return [
+      { role: "system", content: SYSTEM },
+      { role: "user", content: context(paper, settings) + "\n\n" + [
+        "Give the researcher a quick preview of this paper in five fields, each one to three sentences, with concrete details (design, sample, measures, numbers):",
+        "research question or aim; theory or framework; methods; main findings; limitations.",
+        "If the paper has nothing on a field (for example no explicit theory), say so briefly.",
+        'Reply with only JSON: {"rq":"...","theory":"...","methods":"...","findings":"...","limits":"..."}'
+      ].join("\n") }
+    ];
+  }
   function askMessages(paper, settings, question) {
     return [
       { role: "system", content: SYSTEM },
@@ -553,6 +564,6 @@ var RC = (function () {
     ].join("\n");
   }
 
-  return { ASK_DEFAULTS, htmlToMarkdown, glanceFromHeadings, glanceMessages, askMessages, GLANCE, prefillGlance, FOCUS, FOCUS_ORDER, locate, sourceInfo, predictMessages, cleanPrompts, split, clipSource, STANCE, EVIDENCE, STEPS, parseJSON, cleanQuestions, cleanResults, questionsMessages, checkMessages, discussMessages, trendMessages, fileName, buildNote, zoteroNoteHTML, parseFrontmatter, buildTable, trendNote, today, oneLine };
+  return { previewMessages, ASK_DEFAULTS, htmlToMarkdown, glanceFromHeadings, glanceMessages, askMessages, GLANCE, prefillGlance, FOCUS, FOCUS_ORDER, locate, sourceInfo, predictMessages, cleanPrompts, split, clipSource, STANCE, EVIDENCE, STEPS, parseJSON, cleanQuestions, cleanResults, questionsMessages, checkMessages, discussMessages, trendMessages, fileName, buildNote, zoteroNoteHTML, parseFrontmatter, buildTable, trendNote, today, oneLine };
 })();
 if (typeof module === "object" && module.exports) module.exports = RC;

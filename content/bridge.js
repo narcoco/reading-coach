@@ -210,6 +210,7 @@ var ReadingCoach = {
       openPrefs: () => self.openPrefs(),
       getPaper: () => self.getPaper(itemID),
       openReader: () => self.openReader(itemID),
+      refreshNotes: () => { let it = Zotero.Items.get(itemID); if ((it.isAttachment() || it.isNote()) && it.parentItem) it = it.parentItem; return self.otherNotes(it); },
       goToPage: (pdfID, page) => self.goToPage(pdfID, page),
       copy: text => { Zotero.Utilities.Internal.copyTextToClipboard(String(text || "")); },
       saveFocus: list => self.setPref("focus", list.join(",")),
